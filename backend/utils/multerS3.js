@@ -25,39 +25,50 @@ const upload = multer({
 const uploadToS3Middleware = async (req, res, next) => {
   try {
     if (req.files) {
+      // Upload all files in parallel for faster processing
+      const uploadPromises = [];
+      
       for (const fieldName in req.files) {
         const files = Array.isArray(req.files[fieldName]) ? req.files[fieldName] : [req.files[fieldName]];
         for (const file of files) {
           if (file.buffer) {
             // Use S3 if configured and available
             if (fileStorage.useS3) {
-              try {
-                const { key, url } = await uploadToS3(
-                  file.buffer,
-                  file.originalname,
-                  'documents',
-                  file.mimetype
-                );
+              const uploadPromise = uploadToS3(
+                file.buffer,
+                file.originalname,
+                'documents',
+                file.mimetype
+              ).then(({ key, url }) => {
                 file.location = url;
                 file.key = key;
                 file.storage = 's3';
-              } catch (s3Error) {
-                console.error('S3 upload failed, falling back to local:', s3Error);
+                console.log(`✅ Uploaded ${fieldName} to S3: ${key}`);
+              }).catch((s3Error) => {
+                console.error(`❌ S3 upload failed for ${fieldName}:`, s3Error.message);
                 // Fallback to local if S3 fails and platform allows it
                 if (fileStorage.fallbackToLocal) {
-                  await saveToLocal(file);
+                  return saveToLocal(file);
                 } else {
                   throw s3Error; // Vercel requires S3
                 }
-              }
+              });
+              
+              uploadPromises.push(uploadPromise);
             } else if (fileStorage.fallbackToLocal) {
               // Use local storage
-              await saveToLocal(file);
+              uploadPromises.push(saveToLocal(file));
             } else {
               throw new Error('File storage not configured. S3 is required for this platform.');
             }
           }
         }
+      }
+      
+      // Wait for all uploads to complete
+      if (uploadPromises.length > 0) {
+        await Promise.all(uploadPromises);
+        console.log(`✅ All ${uploadPromises.length} files uploaded successfully`);
       }
     }
     next();

@@ -136,7 +136,7 @@ router.post('/register',
   },
   async (req, res, next) => {
     try {
-      // Upload files to S3
+      // Upload files to S3 - do this early to avoid timeout
       const multerS3 = require('../utils/multerS3');
       if (multerS3.uploadToS3Middleware && req.files) {
         console.log('📤 Uploading files to S3...');
