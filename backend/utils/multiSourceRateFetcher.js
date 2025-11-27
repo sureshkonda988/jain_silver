@@ -264,7 +264,7 @@ const fetchFromVercel = async () => {
     }
 
     if (ratePerGram && ratePerGram > 0 && !isNaN(ratePerGram)) {
-      return {
+      const result = {
         ratePerKg: Math.round(ratePerKg),
         ratePerGram: Math.round(ratePerGram * 100) / 100,
         source: 'jainsilverpp1.vercel.app',
@@ -272,12 +272,23 @@ const fetchFromVercel = async () => {
         rawData: rateData,
         usdInrRate: usdInrRate || 89.25 // Default if not found
       };
+      console.log(`✅ Successfully extracted rate: ₹${result.ratePerGram}/gram (₹${result.ratePerKg}/kg)`);
+      return result;
     }
     
     console.warn('⚠️ Could not extract valid rate from Vercel response');
+    console.warn('  ratePerGram:', ratePerGram, 'ratePerKg:', ratePerKg);
+    console.warn('  Full rateData:', JSON.stringify(rateData, null, 2).substring(0, 1000));
     return null;
   } catch (error) {
     console.error('❌ Error fetching from Vercel stream:', error.message);
+    if (error.response) {
+      console.error('  Response status:', error.response.status);
+      console.error('  Response data:', error.response.data?.substring(0, 500));
+    }
+    if (error.code) {
+      console.error('  Error code:', error.code);
+    }
     return null;
   }
 };
