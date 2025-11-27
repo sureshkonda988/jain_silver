@@ -50,8 +50,12 @@ vercel --prod
    - Add the following:
 
 ```
-MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/jain_silver?retryWrites=true&w=majority
+MONGODB_URI=mongodb+srv://Vercel-Admin-jain-silver:DIaRe6ezdzWd0gZ9@jain-silver.etdwbxx.mongodb.net/?retryWrites=true&w=majority
 JWT_SECRET=your-super-secret-jwt-key-minimum-32-characters-long
+JWT_EXPIRES_IN=7d
+ADMIN_EMAIL=admin@jainsilver.com
+ADMIN_PASSWORD=admin123
+OTP_EXPIRY_MINUTES=10
 NODE_ENV=production
 ```
 
@@ -63,10 +67,14 @@ NODE_ENV=production
 
 Set these in Vercel Dashboard → Your Project → Settings → Environment Variables:
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `MONGODB_URI` | MongoDB Atlas connection string | `mongodb+srv://user:pass@cluster.mongodb.net/jain_silver` |
-| `JWT_SECRET` | Secret key for JWT tokens (min 32 chars) | `your-super-secret-key-here` |
+| Variable | Description | Required Value |
+|----------|-------------|----------------|
+| `MONGODB_URI` | MongoDB Atlas connection string | `mongodb+srv://Vercel-Admin-jain-silver:DIaRe6ezdzWd0gZ9@jain-silver.etdwbxx.mongodb.net/?retryWrites=true&w=majority` |
+| `JWT_SECRET` | Secret key for JWT tokens (min 32 chars) | `your-super-secret-key-here` (change this!) |
+| `JWT_EXPIRES_IN` | JWT token expiration | `7d` |
+| `ADMIN_EMAIL` | Admin user email | `admin@jainsilver.com` |
+| `ADMIN_PASSWORD` | Admin user password | `admin123` (change this!) |
+| `OTP_EXPIRY_MINUTES` | OTP expiration time | `10` |
 | `NODE_ENV` | Environment mode | `production` |
 
 ## 🔗 After Deployment
