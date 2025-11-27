@@ -206,19 +206,28 @@ router.post('/register',
   },
   async (req, res, next) => {
     try {
-      // Upload files to S3 - do this early to avoid timeout
       const multerS3 = require('../utils/multerS3');
       if (multerS3.uploadToS3Middleware && req.files) {
         console.log('📤 Uploading files to S3...');
         console.log('Files to upload:', Object.keys(req.files));
         
-        // Add timeout for S3 uploads
-        const uploadPromise = multerS3.uploadToS3Middleware(req, res, next);
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('S3 upload timeout after 30 seconds')), 30000)
-        );
-        
-        await Promise.race([uploadPromise, timeoutPromise]);
+        // Use the middleware function with timeout
+        const s3UploadTimeout = setTimeout(() => {
+          console.error('❌ S3 upload timeout after 30 seconds');
+          if (!res.headersSent) {
+            return res.status(408).json({
+              message: 'Request timeout - S3 upload took too long',
+              error: 'Please try again or check your AWS S3 configuration.'
+            });
+          }
+        }, 30000); // 30 second timeout for S3 uploads
+
+        // Call the middleware function
+        await multerS3.uploadToS3Middleware(req, res, () => {
+          clearTimeout(s3UploadTimeout);
+          console.log('✅ All files uploaded successfully to S3');
+          next();
+        });
       } else {
         console.log('⚠️ S3 middleware not available or no files, skipping S3 upload');
         if (!req.files) {
@@ -236,7 +245,7 @@ router.post('/register',
       // Return error - S3 is required for document storage
       return res.status(500).json({ 
         message: 'File upload service unavailable', 
-        error: s3Error.message || 'Unable to upload documents. Please check S3 configuration.',
+        error: 'Unable to upload documents. Please check S3 configuration and AWS credentials.',
         details: process.env.NODE_ENV === 'development' ? s3Error.message : undefined
       });
     }
