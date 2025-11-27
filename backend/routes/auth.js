@@ -8,6 +8,41 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
+// Root route - get auth statistics from MongoDB
+router.get('/', async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments();
+    const verifiedUsers = await User.countDocuments({ isVerified: true });
+    const approvedUsers = await User.countDocuments({ status: 'approved' });
+    const pendingUsers = await User.countDocuments({ status: 'pending' });
+    const adminUsers = await User.countDocuments({ role: 'admin' });
+
+    res.json({
+      message: 'Auth API',
+      statistics: {
+        totalUsers,
+        verifiedUsers,
+        approvedUsers,
+        pendingUsers,
+        adminUsers
+      },
+      endpoints: {
+        register: 'POST /api/auth/register',
+        verifyOtp: 'POST /api/auth/verify-otp',
+        resendOtp: 'POST /api/auth/resend-otp',
+        signin: 'POST /api/auth/signin',
+        adminSignin: 'POST /api/auth/admin/signin',
+        forgotPassword: 'POST /api/auth/forgot-password',
+        verifyResetOtp: 'POST /api/auth/verify-reset-otp',
+        resetPassword: 'POST /api/auth/reset-password'
+      }
+    });
+  } catch (error) {
+    console.error('Get auth stats error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {

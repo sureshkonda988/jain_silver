@@ -3,6 +3,54 @@ const router = express.Router();
 const User = require('../models/User');
 const auth = require('../middleware/auth');
 
+// Root route - get users data from MongoDB
+router.get('/', async (req, res) => {
+  try {
+    const { status, limit = 10, page = 1 } = req.query;
+    const query = status ? { status } : {};
+    
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    const users = await User.find(query)
+      .select('-password -otp -resetPasswordOTP')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip(skip);
+
+    const totalUsers = await User.countDocuments(query);
+    const approvedCount = await User.countDocuments({ status: 'approved' });
+    const pendingCount = await User.countDocuments({ status: 'pending' });
+    const rejectedCount = await User.countDocuments({ status: 'rejected' });
+
+    res.json({
+      message: 'Users API',
+      data: users,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: totalUsers,
+        pages: Math.ceil(totalUsers / parseInt(limit))
+      },
+      statistics: {
+        total: totalUsers,
+        approved: approvedCount,
+        pending: pendingCount,
+        rejected: rejectedCount
+      },
+      endpoints: {
+        profile: {
+          get: '/api/users/profile',
+          put: '/api/users/profile',
+          description: 'Get or update user profile (requires authentication)'
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 // Get current user profile
 router.get('/profile', auth, async (req, res) => {
   try {

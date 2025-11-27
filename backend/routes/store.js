@@ -1,46 +1,50 @@
 const express = require('express');
 const router = express.Router();
+const StoreInfo = require('../models/StoreInfo');
+const auth = require('../middleware/auth');
+const adminAuth = require('../middleware/adminAuth');
 
-// Store information model (can be stored in database or as static data)
-// For now, using static data that can be updated via admin panel later
-
-// Default store information
-const defaultStoreInfo = {
-  welcomeMessage: 'Welcome to Jain Silver - Your trusted partner for premium silver products. We offer the best quality silver coins, bars, and jewelry with transparent pricing and excellent customer service.',
-  address: 'Andhra Pradesh, India',
-  phoneNumber: '+91 98480 34323',
-  storeTimings: [
-    { day: 'Monday', openTime: '09:00 AM', closeTime: '08:00 PM', isClosed: false },
-    { day: 'Tuesday', openTime: '09:00 AM', closeTime: '08:00 PM', isClosed: false },
-    { day: 'Wednesday', openTime: '09:00 AM', closeTime: '08:00 PM', isClosed: false },
-    { day: 'Thursday', openTime: '09:00 AM', closeTime: '08:00 PM', isClosed: false },
-    { day: 'Friday', openTime: '09:00 AM', closeTime: '08:00 PM', isClosed: false },
-    { day: 'Saturday', openTime: '09:00 AM', closeTime: '08:00 PM', isClosed: false },
-    { day: 'Sunday', openTime: '10:00 AM', closeTime: '06:00 PM', isClosed: false },
-  ],
-  instagram: 'https://www.instagram.com/jainsilverplaza?igsh=MWJrcWlzbjVhcW1jNw==',
-  facebook: 'https://www.facebook.com/share/1CaCEfRxST/',
-  youtube: 'https://youtube.com/@jainsilverplaza6932?si=IluQGMU-eNMVx75A',
-  bankDetails: [
-    {
-      bankName: 'Bank Name',
-      accountNumber: 'XXXXXXXXXXXX',
-      ifscCode: 'XXXX0000000',
-      accountHolderName: 'Jain Silver',
-      branch: 'Branch Name',
-    },
-    // Add more bank accounts if needed
-  ],
-};
-
-// Get store information (public endpoint)
-router.get('/info', async (req, res) => {
+// Root route - get store information from MongoDB
+router.get('/', async (req, res) => {
   try {
-    // In future, this can fetch from database
-    // For now, return default info
-    res.json(defaultStoreInfo);
+    const storeInfo = await StoreInfo.getStoreInfo();
+    res.json(storeInfo);
   } catch (error) {
     console.error('Get store info error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get store information (public endpoint) - alias for root
+router.get('/info', async (req, res) => {
+  try {
+    const storeInfo = await StoreInfo.getStoreInfo();
+    res.json(storeInfo);
+  } catch (error) {
+    console.error('Get store info error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Update store information (admin only)
+router.put('/info', auth, adminAuth, async (req, res) => {
+  try {
+    let storeInfo = await StoreInfo.findOne();
+    
+    if (!storeInfo) {
+      storeInfo = new StoreInfo(req.body);
+    } else {
+      Object.assign(storeInfo, req.body);
+    }
+    
+    await storeInfo.save();
+    
+    res.json({
+      message: 'Store information updated successfully',
+      storeInfo
+    });
+  } catch (error) {
+    console.error('Update store info error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

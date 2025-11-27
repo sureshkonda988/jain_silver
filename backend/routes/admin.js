@@ -1,8 +1,53 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
+const SilverRate = require('../models/SilverRate');
 const auth = require('../middleware/auth');
 const adminAuth = require('../middleware/adminAuth');
+
+// Root route - get admin dashboard data from MongoDB
+router.get('/', auth, adminAuth, async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments();
+    const approvedUsers = await User.countDocuments({ status: 'approved' });
+    const pendingUsers = await User.countDocuments({ status: 'pending', isVerified: true });
+    const rejectedUsers = await User.countDocuments({ status: 'rejected' });
+    const verifiedUsers = await User.countDocuments({ isVerified: true });
+    const totalRates = await SilverRate.countDocuments();
+    
+    const recentUsers = await User.find()
+      .select('-password -otp -resetPasswordOTP')
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    res.json({
+      message: 'Admin API',
+      dashboard: {
+        users: {
+          total: totalUsers,
+          approved: approvedUsers,
+          pending: pendingUsers,
+          rejected: rejectedUsers,
+          verified: verifiedUsers
+        },
+        rates: {
+          total: totalRates
+        },
+        recentUsers
+      },
+      endpoints: {
+        pendingUsers: 'GET /api/admin/pending-users',
+        allUsers: 'GET /api/admin/users',
+        userDetails: 'GET /api/admin/user/:userId',
+        approveUser: 'PUT /api/admin/approve-user/:userId',
+        rejectUser: 'PUT /api/admin/reject-user/:userId'
+      }
+    });
+  } catch (error) {
+    console.error('Get admin dashboard error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
 
 // Get all pending users
 router.get('/pending-users', auth, adminAuth, async (req, res) => {

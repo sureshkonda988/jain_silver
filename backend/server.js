@@ -169,6 +169,16 @@ mongoose.connection.once('open', async () => {
       console.log(`✅ Found ${rateCount} silver rates in database`);
     }
     
+    // Initialize store information if it doesn't exist
+    console.log('🏪 Checking store information...');
+    try {
+      const StoreInfo = require('./models/StoreInfo');
+      const storeInfo = await StoreInfo.getStoreInfo();
+      console.log('✅ Store information initialized/verified');
+    } catch (storeError) {
+      console.error('❌ Error initializing store info:', storeError.message || storeError);
+    }
+    
     // Start rate updater
     console.log('🔄 Starting rate updater...');
     try {
