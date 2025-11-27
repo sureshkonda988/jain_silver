@@ -145,10 +145,14 @@ router.post('/register',
     console.log('📝 POST /api/auth/register - Registration request received');
     console.log('Request method:', req.method);
     console.log('Request path:', req.path);
+    console.log('Request URL:', req.url);
     console.log('Request headers:', {
       'content-type': req.headers['content-type'],
-      'content-length': req.headers['content-length']
+      'content-length': req.headers['content-length'],
+      'user-agent': req.headers['user-agent']?.substring(0, 50)
     });
+    console.log('Request body keys:', Object.keys(req.body || {}));
+    console.log('Request files:', req.files ? Object.keys(req.files) : 'No files yet');
     next();
   }, 
   (req, res, next) => {

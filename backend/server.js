@@ -222,7 +222,17 @@ const loadRoute = (routePath, routeName) => {
 // Load all routes - use route name for both path and name
 const routeNames = ['auth', 'users', 'admin', 'rates', 'store'];
 routeNames.forEach(routeName => {
-  loadRoute(routeName, routeName);
+  const loaded = loadRoute(routeName, routeName);
+  if (!loaded) {
+    console.error(`⚠️  Route /api/${routeName} failed to load - server may have issues`);
+  }
+});
+
+// Add a catch-all for unregistered routes to help debug
+app.use('/api/*', (req, res, next) => {
+  console.log(`⚠️  Unhandled API route: ${req.method} ${req.path}`);
+  console.log(`   Available routes: /api/auth, /api/users, /api/admin, /api/rates, /api/store`);
+  next();
 });
 
 // Socket.io for real-time updates (only if enabled for platform)
