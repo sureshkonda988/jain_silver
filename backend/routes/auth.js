@@ -90,8 +90,20 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Configure multer for S3 file uploads
-const { upload, getFileUrl } = require('../utils/multerS3');
+// Configure multer for S3 file uploads - make it optional
+let upload, getFileUrl;
+try {
+  const multerS3 = require('../utils/multerS3');
+  upload = multerS3.upload;
+  getFileUrl = multerS3.getFileUrl;
+} catch (multerError) {
+  console.warn('⚠️  Multer S3 not available, file uploads will be disabled:', multerError.message);
+  // Create fallback upload middleware
+  const multer = require('multer');
+  const memoryStorage = multer.memoryStorage();
+  upload = multer({ storage: memoryStorage });
+  getFileUrl = () => null;
+}
 
 // Generate JWT token
 const generateToken = (userId) => {

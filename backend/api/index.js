@@ -13,8 +13,12 @@ try {
   app = require('../server');
   
   // Verify app is valid
-  if (!app || typeof app.use !== 'function') {
-    throw new Error('Invalid Express app exported from server.js');
+  if (!app) {
+    throw new Error('Server export is null or undefined');
+  }
+  
+  if (typeof app.use !== 'function') {
+    throw new Error(`Invalid Express app exported from server.js. Got type: ${typeof app}`);
   }
   
   console.log('✅ Server loaded successfully for Vercel');
@@ -22,7 +26,9 @@ try {
   console.error('❌ Error loading server:', error.message);
   console.error('Error name:', error.name);
   if (error.stack) {
-    console.error('Error stack:', error.stack);
+    // Log first 500 chars of stack to avoid huge logs
+    const stackPreview = error.stack.substring(0, 500);
+    console.error('Error stack (preview):', stackPreview);
   }
   
   // Create a minimal error handler app
@@ -33,7 +39,23 @@ try {
   
   // Health check endpoint
   app.get('/health', (req, res) => {
-    res.json({ status: 'error', message: 'Server initialization failed' });
+    res.json({ 
+      status: 'error', 
+      message: 'Server initialization failed',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  });
+  
+  // API info endpoint
+  app.get('/api', (req, res) => {
+    res.json({
+      error: 'Server initialization failed',
+      message: error.message,
+      endpoints: {
+        health: '/health'
+      }
+    });
   });
   
   // Error handler route
@@ -42,6 +64,7 @@ try {
       error: 'Server initialization failed', 
       message: error.message,
       errorType: error.name,
+      path: req.path,
       // Only show stack in development
       ...(process.env.NODE_ENV === 'development' ? { stack: error.stack } : {})
     });

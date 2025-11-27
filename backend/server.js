@@ -57,12 +57,31 @@ if (!loadPlatformConfig()) {
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
+
+// Socket.io setup - only if not on Vercel (Vercel doesn't support WebSockets)
+let io = null;
+if (!platform || !platform.isVercel) {
+  try {
+    io = socketIo(server, {
+      cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+      }
+    });
+    app.set('io', io);
+  } catch (socketError) {
+    console.error('Socket.io initialization error:', socketError.message);
+    // Continue without Socket.io
   }
-});
+} else {
+  // On Vercel, create a mock io object to prevent errors
+  io = {
+    emit: () => {},
+    on: () => {},
+    to: () => ({ emit: () => {} })
+  };
+  app.set('io', io);
+}
 
 // Middleware - CORS configuration
 app.use(cors({
@@ -165,11 +184,33 @@ app.get('/', (req, res) => {
 });
 
 // Routes
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/users', require('./routes/users'));
-app.use('/api/admin', require('./routes/admin'));
-app.use('/api/rates', require('./routes/rates'));
-app.use('/api/store', require('./routes/store'));
+// Load routes with error handling - prevent server from crashing if a route fails to load
+const loadRoute = (path, routeName) => {
+  try {
+    const route = require(path);
+    app.use(`/api/${routeName}`, route);
+    console.log(`✅ Route loaded: /api/${routeName}`);
+    return true;
+  } catch (error) {
+    console.error(`❌ Failed to load route /api/${routeName}:`, error.message);
+    // Add error route for failed route
+    app.use(`/api/${routeName}`, (req, res) => {
+      res.status(500).json({ 
+        error: 'Route initialization failed', 
+        route: routeName,
+        message: error.message 
+      });
+    });
+    return false;
+  }
+};
+
+// Load all routes
+loadRoute('./routes/auth', 'auth');
+loadRoute('./routes/users', 'users');
+loadRoute('./routes/admin', 'admin');
+loadRoute('./routes/rates', 'rates');
+loadRoute('./routes/store', 'store');
 
 // Socket.io for real-time updates (only if enabled for platform)
 if (serverConfig && serverConfig.enableSocketIO) {
