@@ -5,10 +5,41 @@ const http = require('http');
 const socketIo = require('socket.io');
 require('dotenv').config();
 
-// Platform detection
-const { platform, database, server: serverConfig } = require('./config/platform');
-console.log(`🚀 Running on platform: ${platform.name.toUpperCase()}`);
-console.log(`📦 Platform details:`, require('./config/platform').getConfig());
+// Platform detection - with error handling
+let platform, database, serverConfig;
+try {
+  const platformConfig = require('./config/platform');
+  platform = platformConfig.platform;
+  database = platformConfig.database;
+  serverConfig = platformConfig.server;
+  console.log(`🚀 Running on platform: ${platform.name.toUpperCase()}`);
+  console.log(`📦 Platform details:`, platformConfig.getConfig());
+} catch (error) {
+  console.error('Error loading platform config:', error);
+  // Fallback configuration
+  const isVercel = process.env.VERCEL === 'true' || process.env.VERCEL_ENV;
+  platform = {
+    isVercel: !!isVercel,
+    isAWS: false,
+    isDocker: false,
+    isLocal: !isVercel,
+    name: isVercel ? 'vercel' : 'local'
+  };
+  database = {
+    maxPoolSize: isVercel ? 1 : 10,
+    minPoolSize: isVercel ? 0 : 1,
+    serverSelectionTimeoutMS: isVercel ? 5000 : 10000,
+    socketTimeoutMS: isVercel ? 45000 : 60000,
+    retryWrites: !isVercel,
+    retryReads: !isVercel
+  };
+  serverConfig = {
+    enableSocketIO: !isVercel,
+    enableRateUpdater: !isVercel,
+    healthCheckPath: '/health'
+  };
+  console.log(`⚠️  Using fallback platform config: ${platform.name}`);
+}
 
 const app = express();
 const server = http.createServer(app);
