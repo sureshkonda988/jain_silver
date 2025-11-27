@@ -113,46 +113,21 @@ const generateToken = (userId) => {
   });
 };
 
-// Register new user - GET handler for better error message
-router.get('/register', (req, res) => {
-  res.status(405).json({ 
-    message: 'Method not allowed', 
-    error: 'Registration endpoint requires POST method, not GET',
-    correctMethod: 'POST',
-    endpoint: '/api/auth/register',
-    example: {
-      method: 'POST',
-      url: '/api/auth/register',
-      contentType: 'multipart/form-data',
-      body: {
-        name: 'string',
-        email: 'string',
-        phone: 'string',
-        password: 'string',
-        aadharNumber: 'string',
-        panNumber: 'string',
-        aadharFront: 'file',
-        aadharBack: 'file',
-        panImage: 'file'
-      }
-    }
-  });
-});
-
 // Register new user - POST handler
 router.post('/register',
   (req, res, next) => {
-    console.log('📝 POST /api/auth/register - Registration request received');
-    console.log('Request method:', req.method);
-    console.log('Request path:', req.path);
-    console.log('Request URL:', req.url);
-    console.log('Request headers:', {
-      'content-type': req.headers['content-type'],
-      'content-length': req.headers['content-length'],
-      'user-agent': req.headers['user-agent']?.substring(0, 50)
+    console.log('✅ POST /api/auth/register - Registration request received');
+    console.log('📋 Request details:', {
+      method: req.method,
+      path: req.path,
+      url: req.url,
+      contentType: req.headers['content-type'],
+      contentLength: req.headers['content-length'],
+      origin: req.headers['origin'],
+      userAgent: req.headers['user-agent']?.substring(0, 80)
     });
-    console.log('Request body keys:', Object.keys(req.body || {}));
-    console.log('Request files:', req.files ? Object.keys(req.files) : 'No files yet');
+    console.log('📦 Request body keys:', Object.keys(req.body || {}));
+    console.log('📎 Request files:', req.files ? Object.keys(req.files) : 'No files yet');
     next();
   }, 
   (req, res, next) => {
@@ -491,10 +466,18 @@ router.post('/register',
         otp: otp // Remove this in production
       });
     } catch (error) {
-      console.error('❌ Registration error:', error);
-      console.error('Error details:', {
+      console.error('❌ Registration error:', error.message);
+      console.error('📊 Error details:', {
         message: error.message,
-        stack: error.stack,
+        code: error.code,
+        name: error.name,
+        statusCode: error.statusCode,
+        keyPattern: error.keyPattern,
+        keyValue: error.keyValue
+      });
+      if (error.stack) {
+        console.error('🔍 Error stack (first 300 chars):', error.stack.substring(0, 300));
+      }
         name: error.name
       });
       
