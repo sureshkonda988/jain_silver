@@ -86,15 +86,27 @@ const saveToLocal = async (file) => {
   file.storage = 'local';
 };
 
-// Helper to get CloudFront URL from S3 location
+// Helper to get CloudFront URL from S3 location or key
 const getFileUrl = (s3Location) => {
   if (!s3Location) return null;
-  // If it's already a CloudFront URL, return as is
   const { AWS_CONFIG } = require('../config/aws');
-  if (s3Location.includes('cloudfront.net')) {
+  
+  // If it's already a CloudFront URL, return as is
+  if (s3Location.includes('cloudfront.net') || s3Location.startsWith('https://')) {
     return s3Location;
   }
-  // If it's an S3 key, convert to CloudFront URL
+  
+  // If it's an S3 key (starts with documents/ or images/), convert to CloudFront URL
+  if (s3Location.startsWith('documents/') || s3Location.startsWith('images/')) {
+    return `${AWS_CONFIG.CLOUDFRONT_URL}/${s3Location}`;
+  }
+  
+  // If it's just a filename, assume it's in documents folder
+  if (!s3Location.includes('/')) {
+    return `${AWS_CONFIG.CLOUDFRONT_URL}/documents/${s3Location}`;
+  }
+  
+  // Default: prepend CloudFront URL
   return `${AWS_CONFIG.CLOUDFRONT_URL}/${s3Location}`;
 };
 

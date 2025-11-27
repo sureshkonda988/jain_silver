@@ -94,11 +94,16 @@ router.get('/', async (req, res) => {
 // Get current user profile
 router.get('/profile', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.userId).select('-password -otp');
+    const user = await User.findById(req.user.userId).select('-password -otp -resetPasswordOTP');
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-    res.json(user);
+    
+    // Format document URLs with CloudFront
+    const { formatUserDocuments } = require('../utils/documentHelper');
+    const formattedUser = formatUserDocuments(user);
+    
+    res.json(formattedUser);
   } catch (error) {
     console.error('Get profile error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });

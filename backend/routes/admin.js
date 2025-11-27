@@ -95,9 +95,13 @@ router.get('/pending-users', auth, adminAuth, async (req, res) => {
     const users = await User.find({ 
       status: 'pending',
       isVerified: true
-    }).select('-password -otp').sort({ createdAt: -1 });
+    }).select('-password -otp -resetPasswordOTP').sort({ createdAt: -1 });
 
-    res.json(users);
+    // Format document URLs with CloudFront
+    const { formatUserDocuments } = require('../utils/documentHelper');
+    const formattedUsers = users.map(user => formatUserDocuments(user));
+
+    res.json(formattedUsers);
   } catch (error) {
     console.error('Get pending users error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -111,10 +115,14 @@ router.get('/users', auth, adminAuth, async (req, res) => {
     const query = status ? { status } : {};
     
     const users = await User.find(query)
-      .select('-password -otp')
+      .select('-password -otp -resetPasswordOTP')
       .sort({ createdAt: -1 });
 
-    res.json(users);
+    // Format document URLs with CloudFront
+    const { formatUserDocuments } = require('../utils/documentHelper');
+    const formattedUsers = users.map(user => formatUserDocuments(user));
+
+    res.json(formattedUsers);
   } catch (error) {
     console.error('Get users error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -187,13 +195,17 @@ router.put('/reject-user/:userId', auth, adminAuth, async (req, res) => {
 router.get('/user/:userId', auth, adminAuth, async (req, res) => {
   try {
     const { userId } = req.params;
-    const user = await User.findById(userId).select('-password -otp');
+    const user = await User.findById(userId).select('-password -otp -resetPasswordOTP');
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    res.json(user);
+    // Format document URLs with CloudFront
+    const { formatUserDocuments } = require('../utils/documentHelper');
+    const formattedUser = formatUserDocuments(user);
+
+    res.json(formattedUser);
   } catch (error) {
     console.error('Get user details error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });

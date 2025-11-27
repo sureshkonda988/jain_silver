@@ -8,12 +8,14 @@ const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
 const awsConfig = {
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_REGION || 'us-east-1',
+  region: process.env.AWS_REGION || 'ap-south-1', // Default to ap-south-1 for India
 };
 
 if (!awsConfig.accessKeyId || !awsConfig.secretAccessKey) {
   console.warn('⚠️  AWS credentials not found in environment variables!');
   console.warn('⚠️  Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in your .env file');
+} else {
+  console.log('✅ AWS credentials loaded from environment variables');
 }
 
 // S3 Client Configuration
@@ -40,10 +42,19 @@ const dynamoDocClient = DynamoDBDocumentClient.from(dynamoDBClient);
 // AWS Constants
 const AWS_CONFIG = {
   S3_BUCKET_NAME: process.env.AWS_S3_BUCKET_NAME || 'jain-storage',
-  CLOUDFRONT_URL: process.env.AWS_CLOUDFRONT_URL || 'https://dglrmjf688z0y.cloudfront.net',
+  CLOUDFRONT_URL: process.env.AWS_CLOUDFRONT_URL ? 
+    (process.env.AWS_CLOUDFRONT_URL.startsWith('https://') ? 
+      process.env.AWS_CLOUDFRONT_URL : 
+      `https://${process.env.AWS_CLOUDFRONT_URL}`) : 
+    'https://dglrmjf688z0y.cloudfront.net',
   DYNAMODB_TABLE_NAME: process.env.AWS_DYNAMODB_TABLE_NAME || 'Jain_Users',
   REGION: awsConfig.region,
 };
+
+if (awsConfig.accessKeyId && awsConfig.secretAccessKey) {
+  console.log(`✅ AWS S3 Bucket: ${AWS_CONFIG.S3_BUCKET_NAME}`);
+  console.log(`✅ CloudFront URL: ${AWS_CONFIG.CLOUDFRONT_URL}`);
+}
 
 module.exports = {
   s3Client,
