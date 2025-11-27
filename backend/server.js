@@ -30,12 +30,31 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/uploads', express.static('uploads'));
 
 // Database connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/jain_silver', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log('MongoDB Connected'))
-.catch(err => console.error('MongoDB connection error:', err));
+const connectDB = async () => {
+  try {
+    // Check if already connected
+    if (mongoose.connection.readyState === 1) {
+      console.log('MongoDB already connected');
+      return;
+    }
+
+    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/jain_silver', {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+    });
+    console.log('MongoDB Connected');
+  } catch (err) {
+    console.error('MongoDB connection error:', err);
+    // Don't throw in serverless - let routes handle it gracefully
+    if (!process.env.VERCEL) {
+      throw err;
+    }
+  }
+};
+
+// Connect to database
+connectDB();
 
 // Root route
 app.get('/', (req, res) => {

@@ -7,6 +7,38 @@ const adminAuth = require('../middleware/adminAuth');
 // Root route - get store information from MongoDB
 router.get('/', async (req, res) => {
   try {
+    // Check MongoDB connection
+    const mongoose = require('mongoose');
+    if (mongoose.connection.readyState !== 1) {
+      // Return default data if MongoDB not connected
+      return res.json({
+        welcomeMessage: 'Welcome to Jain Silver - Your trusted partner for premium silver products. We offer the best quality silver coins, bars, and jewelry with transparent pricing and excellent customer service.',
+        address: 'Andhra Pradesh, India',
+        phoneNumber: '+91 98480 34323',
+        storeTimings: [
+          { day: 'Monday', openTime: '09:00 AM', closeTime: '08:00 PM', isClosed: false },
+          { day: 'Tuesday', openTime: '09:00 AM', closeTime: '08:00 PM', isClosed: false },
+          { day: 'Wednesday', openTime: '09:00 AM', closeTime: '08:00 PM', isClosed: false },
+          { day: 'Thursday', openTime: '09:00 AM', closeTime: '08:00 PM', isClosed: false },
+          { day: 'Friday', openTime: '09:00 AM', closeTime: '08:00 PM', isClosed: false },
+          { day: 'Saturday', openTime: '09:00 AM', closeTime: '08:00 PM', isClosed: false },
+          { day: 'Sunday', openTime: '10:00 AM', closeTime: '06:00 PM', isClosed: false },
+        ],
+        instagram: 'https://www.instagram.com/jainsilverplaza?igsh=MWJrcWlzbjVhcW1jNw==',
+        facebook: 'https://www.facebook.com/share/1CaCEfRxST/',
+        youtube: 'https://youtube.com/@jainsilverplaza6932?si=IluQGMU-eNMVx75A',
+        bankDetails: [
+          {
+            bankName: 'Bank Name',
+            accountNumber: 'XXXXXXXXXXXX',
+            ifscCode: 'XXXX0000000',
+            accountHolderName: 'Jain Silver',
+            branch: 'Branch Name',
+          }
+        ]
+      });
+    }
+    
     const storeInfo = await StoreInfo.getStoreInfo();
     res.json(storeInfo);
   } catch (error) {

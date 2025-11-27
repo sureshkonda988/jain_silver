@@ -11,6 +11,32 @@ const fs = require('fs');
 // Root route - get auth statistics from MongoDB
 router.get('/', async (req, res) => {
   try {
+    const mongoose = require('mongoose');
+    // Check MongoDB connection
+    if (mongoose.connection.readyState !== 1) {
+      return res.json({
+        message: 'Auth API',
+        statistics: {
+          totalUsers: 0,
+          verifiedUsers: 0,
+          approvedUsers: 0,
+          pendingUsers: 0,
+          adminUsers: 0,
+          note: 'MongoDB connection not ready'
+        },
+        endpoints: {
+          register: 'POST /api/auth/register',
+          verifyOtp: 'POST /api/auth/verify-otp',
+          resendOtp: 'POST /api/auth/resend-otp',
+          signin: 'POST /api/auth/signin',
+          adminSignin: 'POST /api/auth/admin/signin',
+          forgotPassword: 'POST /api/auth/forgot-password',
+          verifyResetOtp: 'POST /api/auth/verify-reset-otp',
+          resetPassword: 'POST /api/auth/reset-password'
+        }
+      });
+    }
+
     const totalUsers = await User.countDocuments();
     const verifiedUsers = await User.countDocuments({ isVerified: true });
     const approvedUsers = await User.countDocuments({ status: 'approved' });

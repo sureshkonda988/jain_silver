@@ -6,6 +6,35 @@ const auth = require('../middleware/auth');
 // Root route - get users data from MongoDB
 router.get('/', async (req, res) => {
   try {
+    const mongoose = require('mongoose');
+    // Check MongoDB connection
+    if (mongoose.connection.readyState !== 1) {
+      return res.json({
+        message: 'Users API',
+        data: [],
+        pagination: {
+          page: 1,
+          limit: 10,
+          total: 0,
+          pages: 0
+        },
+        statistics: {
+          total: 0,
+          approved: 0,
+          pending: 0,
+          rejected: 0,
+          note: 'MongoDB connection not ready'
+        },
+        endpoints: {
+          profile: {
+            get: '/api/users/profile',
+            put: '/api/users/profile',
+            description: 'Get or update user profile (requires authentication)'
+          }
+        }
+      });
+    }
+
     const { status, limit = 10, page = 1 } = req.query;
     const query = status ? { status } : {};
     

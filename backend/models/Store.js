@@ -44,6 +44,11 @@ const storeInfoSchema = new mongoose.Schema({
 
 // Ensure only one store info document exists
 storeInfoSchema.statics.getStoreInfo = async function() {
+  // Check if MongoDB is connected
+  if (mongoose.connection.readyState !== 1) {
+    throw new Error('MongoDB connection not ready');
+  }
+  
   let storeInfo = await this.findOne();
   if (!storeInfo) {
     // Create default store info
@@ -72,5 +77,14 @@ storeInfoSchema.statics.getStoreInfo = async function() {
   return storeInfo;
 };
 
-module.exports = mongoose.model('StoreInfo', storeInfoSchema);
+// Export model, handling case where it might already be registered
+let StoreInfo;
+try {
+  StoreInfo = mongoose.model('StoreInfo', storeInfoSchema);
+} catch (error) {
+  // Model already registered, use existing
+  StoreInfo = mongoose.model('StoreInfo');
+}
+
+module.exports = StoreInfo;
 

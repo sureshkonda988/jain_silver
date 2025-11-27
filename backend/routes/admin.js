@@ -8,6 +8,35 @@ const adminAuth = require('../middleware/adminAuth');
 // Root route - get admin dashboard data from MongoDB
 router.get('/', auth, adminAuth, async (req, res) => {
   try {
+    const mongoose = require('mongoose');
+    // Check MongoDB connection
+    if (mongoose.connection.readyState !== 1) {
+      return res.json({
+        message: 'Admin API',
+        dashboard: {
+          users: {
+            total: 0,
+            approved: 0,
+            pending: 0,
+            rejected: 0,
+            verified: 0,
+            note: 'MongoDB connection not ready'
+          },
+          rates: {
+            total: 0
+          },
+          recentUsers: []
+        },
+        endpoints: {
+          pendingUsers: 'GET /api/admin/pending-users',
+          allUsers: 'GET /api/admin/users',
+          userDetails: 'GET /api/admin/user/:userId',
+          approveUser: 'PUT /api/admin/approve-user/:userId',
+          rejectUser: 'PUT /api/admin/reject-user/:userId'
+        }
+      });
+    }
+
     const totalUsers = await User.countDocuments();
     const approvedUsers = await User.countDocuments({ status: 'approved' });
     const pendingUsers = await User.countDocuments({ status: 'pending', isVerified: true });
