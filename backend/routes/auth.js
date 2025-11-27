@@ -134,7 +134,21 @@ router.post('/register',
       next();
     });
   },
-  require('../utils/multerS3').uploadToS3Middleware,
+  async (req, res, next) => {
+    try {
+      // Try to upload to S3, but don't fail if it's not available
+      const multerS3 = require('../utils/multerS3');
+      if (multerS3.uploadToS3Middleware) {
+        await multerS3.uploadToS3Middleware(req, res, next);
+      } else {
+        next();
+      }
+    } catch (s3Error) {
+      console.error('⚠️ S3 upload middleware error (continuing anyway):', s3Error.message);
+      // Continue without S3 upload - files will be stored in memory
+      next();
+    }
+  },
   [
     body('name').trim().notEmpty().withMessage('Name is required'),
     body('email').isEmail().withMessage('Valid email is required'),
@@ -157,8 +171,28 @@ router.post('/register',
   async (req, res) => {
     try {
       console.log('📝 Registration request received');
-      console.log('Request body:', req.body);
+      console.log('Request body:', { ...req.body, password: '***' }); // Don't log password
       console.log('Request files:', req.files ? Object.keys(req.files) : 'No files');
+      
+      // Check MongoDB connection first
+      const mongoose = require('mongoose');
+      if (mongoose.connection.readyState !== 1) {
+        console.log('⚠️ MongoDB not connected, attempting connection...');
+        try {
+          await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/jain_silver', {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+            serverSelectionTimeoutMS: 5000,
+          });
+          console.log('✅ MongoDB connected for registration');
+        } catch (connError) {
+          console.error('❌ MongoDB connection failed:', connError.message);
+          return res.status(503).json({ 
+            message: 'Database connection failed', 
+            error: 'Please try again later. Check MongoDB connection.' 
+          });
+        }
+      }
       
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
@@ -203,25 +237,54 @@ router.post('/register',
 
       // Validate file uploads
       if (!req.files || !req.files.aadharFront || !req.files.aadharBack || !req.files.panImage) {
+        console.error('❌ Missing required files:', {
+          aadharFront: !!req.files?.aadharFront,
+          aadharBack: !!req.files?.aadharBack,
+          panImage: !!req.files?.panImage,
+          allFiles: req.files ? Object.keys(req.files) : 'No files object'
+        });
         return res.status(400).json({ 
-          message: 'All document images are required (Aadhar Front, Aadhar Back, PAN Image)' 
+          message: 'All document images are required (Aadhar Front, Aadhar Back, PAN Image)',
+          received: req.files ? Object.keys(req.files) : []
         });
       }
 
-      // Get CloudFront URLs from S3 uploads
-      const documents = {
-        aadhar: {
-          front: getFileUrl(req.files.aadharFront[0].location) || req.files.aadharFront[0].key,
-          back: getFileUrl(req.files.aadharBack[0].location) || req.files.aadharBack[0].key,
-          number: aadharNumber.trim()
-        },
-        pan: {
-          image: getFileUrl(req.files.panImage[0].location) || req.files.panImage[0].key,
-          number: panNumber.trim().toUpperCase()
-        }
-      };
+      console.log('✅ All required files received');
+
+      // Get CloudFront URLs from S3 uploads or use file keys
+      let documents;
+      try {
+        const aadharFrontFile = Array.isArray(req.files.aadharFront) ? req.files.aadharFront[0] : req.files.aadharFront;
+        const aadharBackFile = Array.isArray(req.files.aadharBack) ? req.files.aadharBack[0] : req.files.aadharBack;
+        const panImageFile = Array.isArray(req.files.panImage) ? req.files.panImage[0] : req.files.panImage;
+
+        documents = {
+          aadhar: {
+            front: getFileUrl ? (getFileUrl(aadharFrontFile.location) || aadharFrontFile.key || 'pending') : 'pending',
+            back: getFileUrl ? (getFileUrl(aadharBackFile.location) || aadharBackFile.key || 'pending') : 'pending',
+            number: aadharNumber.trim()
+          },
+          pan: {
+            image: getFileUrl ? (getFileUrl(panImageFile.location) || panImageFile.key || 'pending') : 'pending',
+            number: panNumber.trim().toUpperCase()
+          }
+        };
+
+        console.log('✅ Document URLs prepared:', {
+          aadharFront: documents.aadhar.front ? 'Set' : 'Missing',
+          aadharBack: documents.aadhar.back ? 'Set' : 'Missing',
+          panImage: documents.pan.image ? 'Set' : 'Missing'
+        });
+      } catch (docError) {
+        console.error('❌ Error processing document URLs:', docError);
+        return res.status(500).json({ 
+          message: 'Error processing document files', 
+          error: docError.message 
+        });
+      }
 
       // Create user
+      console.log('👤 Creating user in MongoDB...');
       const user = new User({
         name: name.trim(),
         email: normalizedEmail,
@@ -235,7 +298,13 @@ router.post('/register',
         status: 'pending'
       });
 
-      await user.save();
+      try {
+        await user.save();
+        console.log('✅ User saved to MongoDB:', user._id);
+      } catch (saveError) {
+        console.error('❌ Error saving user to MongoDB:', saveError);
+        throw saveError;
+      }
 
       // In production, send OTP via SMS/Email
       console.log(`✅ Registration successful for ${normalizedEmail || normalizedPhone}`);
