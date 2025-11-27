@@ -10,8 +10,17 @@ router.get('/', async (req, res) => {
     // Check MongoDB connection
     const mongoose = require('mongoose');
     if (mongoose.connection.readyState !== 1) {
-      // Return default data if MongoDB not connected
-      return res.json({
+      // Try to connect
+      try {
+        await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/jain_silver', {
+          useNewUrlParser: true,
+          useUnifiedTopology: true,
+          serverSelectionTimeoutMS: 5000,
+        });
+      } catch (connError) {
+        console.error('MongoDB connection failed, returning default data:', connError);
+        // Return default data if MongoDB not connected
+        return res.json({
         welcomeMessage: 'Welcome to Jain Silver - Your trusted partner for premium silver products. We offer the best quality silver coins, bars, and jewelry with transparent pricing and excellent customer service.',
         address: 'Andhra Pradesh, India',
         phoneNumber: '+91 98480 34323',
@@ -50,6 +59,24 @@ router.get('/', async (req, res) => {
 // Get store information (public endpoint) - alias for root
 router.get('/info', async (req, res) => {
   try {
+    // Ensure MongoDB connection
+    const mongoose = require('mongoose');
+    if (mongoose.connection.readyState !== 1) {
+      try {
+        await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/jain_silver', {
+          useNewUrlParser: true,
+          useUnifiedTopology: true,
+          serverSelectionTimeoutMS: 5000,
+        });
+      } catch (connError) {
+        console.error('MongoDB connection failed:', connError);
+        return res.status(503).json({ 
+          message: 'Database connection unavailable', 
+          error: 'Service temporarily unavailable' 
+        });
+      }
+    }
+    
     const storeInfo = await StoreInfo.getStoreInfo();
     res.json(storeInfo);
   } catch (error) {

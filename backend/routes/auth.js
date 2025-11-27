@@ -14,7 +14,16 @@ router.get('/', async (req, res) => {
     const mongoose = require('mongoose');
     // Check MongoDB connection
     if (mongoose.connection.readyState !== 1) {
-      return res.json({
+      // Try to connect
+      try {
+        await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/jain_silver', {
+          useNewUrlParser: true,
+          useUnifiedTopology: true,
+          serverSelectionTimeoutMS: 5000,
+        });
+      } catch (connError) {
+        console.error('MongoDB connection failed, returning default stats:', connError);
+        return res.json({
         message: 'Auth API',
         statistics: {
           totalUsers: 0,

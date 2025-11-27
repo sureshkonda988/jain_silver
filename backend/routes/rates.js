@@ -6,6 +6,25 @@ const auth = require('../middleware/auth');
 // Get all silver rates (allow without auth for public viewing, but auth recommended)
 router.get('/', async (req, res) => {
   try {
+    // Ensure MongoDB connection
+    const mongoose = require('mongoose');
+    if (mongoose.connection.readyState !== 1) {
+      // Try to connect
+      try {
+        await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/jain_silver', {
+          useNewUrlParser: true,
+          useUnifiedTopology: true,
+          serverSelectionTimeoutMS: 5000,
+        });
+      } catch (connError) {
+        console.error('MongoDB connection failed:', connError);
+        return res.status(503).json({ 
+          message: 'Database connection unavailable', 
+          error: 'Service temporarily unavailable' 
+        });
+      }
+    }
+
     // Try to get user from auth if token is provided, but don't require it
     let user = null;
     try {

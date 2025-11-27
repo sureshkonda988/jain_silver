@@ -29,32 +29,65 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/uploads', express.static('uploads'));
 
-// Database connection
+// Database connection - optimized for Vercel serverless
 const connectDB = async () => {
   try {
     // Check if already connected
     if (mongoose.connection.readyState === 1) {
-      console.log('MongoDB already connected');
-      return;
+      return mongoose.connection;
     }
 
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/jain_silver', {
+    // If connecting, wait for it
+    if (mongoose.connection.readyState === 2) {
+      await new Promise((resolve) => {
+        mongoose.connection.once('connected', resolve);
+        mongoose.connection.once('error', resolve);
+      });
+      if (mongoose.connection.readyState === 1) {
+        return mongoose.connection;
+      }
+    }
+
+    // Connect with optimized settings for serverless
+    const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/jain_silver', {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+      minPoolSize: 1,
     });
     console.log('MongoDB Connected');
+    return conn;
   } catch (err) {
     console.error('MongoDB connection error:', err);
     // Don't throw in serverless - let routes handle it gracefully
     if (!process.env.VERCEL) {
       throw err;
     }
+    return null;
   }
 };
 
 // Connect to database
 connectDB();
+
+// Helper function to ensure DB connection before operations
+const ensureDBConnection = async () => {
+  if (mongoose.connection.readyState === 1) {
+    return true;
+  }
+  try {
+    await connectDB();
+    return mongoose.connection.readyState === 1;
+  } catch (error) {
+    console.error('Failed to ensure DB connection:', error);
+    return false;
+  }
+};
+
+// Make helper available to routes
+app.locals.ensureDBConnection = ensureDBConnection;
 
 // Root route
 app.get('/', (req, res) => {
