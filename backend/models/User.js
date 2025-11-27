@@ -88,11 +88,10 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-// Create User model - MongoDB collection will be 'users' (Mongoose auto-pluralizes)
+// Create User model
+// Mongoose automatically pluralizes model name: 'User' -> 'users' collection
+// This ensures all users are saved in the 'users' collection in MongoDB
 const User = mongoose.model('User', userSchema);
-
-// Ensure collection name is 'users'
-User.collection.name = 'users';
 
 module.exports = User;
 

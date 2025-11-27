@@ -394,7 +394,7 @@ router.post('/register',
         });
       }
 
-      // Create user
+      // Create user - will be saved in 'users' collection (Mongoose auto-pluralizes 'User' -> 'users')
       console.log('👤 Creating user in MongoDB (collection: users)...');
       const user = new User({
         name: name.trim(),
@@ -414,13 +414,14 @@ router.post('/register',
       try {
         await user.save();
         console.log('✅ User saved to MongoDB collection "users":', user._id);
-        console.log('   Collection name:', User.collection.name);
+        console.log('   Collection:', user.constructor.collection.name);
         console.log('   User details:', {
           name: user.name,
           email: user.email,
           phone: user.phone,
           status: user.status,
-          role: user.role
+          role: user.role,
+          isVerified: user.isVerified
         });
       } catch (saveError) {
         console.error('❌ Error saving user to MongoDB:', saveError);
