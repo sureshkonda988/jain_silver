@@ -6,7 +6,11 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "init-rates": "node scripts/init-rates.js"
+    "init-rates": "node scripts/init-rates.js",
+    "migrate": "node scripts/migrate-to-atlas.js",
+    "quick-migrate": "node scripts/quick-migrate.js",
+    "migrate-local": "node scripts/migrate-from-local.js",
+    "check-db": "node scripts/check-database.js"
   },
   "dependencies": {
     "axios": "^1.13.2",
