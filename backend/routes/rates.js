@@ -4,6 +4,7 @@ const SilverRate = require('../models/SilverRate');
 const auth = require('../middleware/auth');
 
 // Get all silver rates (allow without auth for public viewing, but auth recommended)
+// Fetches live rates from jainsilverpp1.vercel.app/prices/stream and updates MongoDB
 router.get('/', async (req, res) => {
   try {
     // Ensure MongoDB connection
@@ -39,7 +40,63 @@ router.get('/', async (req, res) => {
       // No valid token, but we'll still return rates for public viewing
     }
     
+    // Fetch live rates from jainsilverpp1.vercel.app/prices/stream
+    let liveRate = null;
+    try {
+      const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
+      liveRate = await fetchSilverRatesFromMultipleSources();
+      
+      if (liveRate && liveRate.ratePerGram && liveRate.ratePerGram > 0) {
+        console.log(`✅ Fetched live rate: ₹${liveRate.ratePerGram}/gram from ${liveRate.source}`);
+        
+        // Update all rates in MongoDB with live data
+        const rates = await SilverRate.find({ location: 'Andhra Pradesh' });
+        const baseRatePerGram = liveRate.ratePerGram;
+        
+        for (const rate of rates) {
+          if (!rate.weight || !rate.weight.value) continue;
+          
+          // Calculate rate per gram based on purity
+          let ratePerGram = baseRatePerGram;
+          if (rate.purity === '92.5%') {
+            ratePerGram = baseRatePerGram * 0.96;
+          } else if (rate.purity === '99.99%') {
+            ratePerGram = baseRatePerGram * 1.005;
+          }
+          
+          rate.ratePerGram = Math.round(ratePerGram * 100) / 100;
+          
+          // Calculate total rate based on weight
+          let weightInGrams = rate.weight.value;
+          if (rate.weight.unit === 'kg') {
+            weightInGrams = rate.weight.value * 1000;
+          } else if (rate.weight.unit === 'oz') {
+            weightInGrams = rate.weight.value * 28.35;
+          }
+          
+          rate.rate = Math.round(rate.ratePerGram * weightInGrams * 100) / 100;
+          rate.lastUpdated = new Date();
+          await rate.save();
+        }
+      } else {
+        console.warn('⚠️ Failed to fetch live rate, using cached rates');
+      }
+    } catch (rateFetchError) {
+      console.error('⚠️ Error fetching live rates:', rateFetchError.message);
+      // Continue with cached rates from MongoDB
+    }
+    
+    // Return updated rates from MongoDB
     const rates = await SilverRate.find({ location: 'Andhra Pradesh' }).sort({ type: 1, 'weight.value': 1 });
+    
+    // Add USD rate if available
+    if (liveRate && liveRate.usdInrRate) {
+      rates.forEach(rate => {
+        rate._doc = rate._doc || rate.toObject();
+        rate._doc.usdInrRate = liveRate.usdInrRate;
+      });
+    }
+    
     res.json(rates);
   } catch (error) {
     console.error('Get rates error:', error);

@@ -99,47 +99,62 @@ const fetchFromRBGoldspot = async () => {
   }
 };
 
-// Fetch from Vercel (SSE format)
+// Fetch from Vercel (SSE format) - Primary source for live rates
 const fetchFromVercel = async () => {
   try {
     const response = await axios.get('https://jainsilverpp1.vercel.app/prices/stream', {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'text/event-stream',
+        'Accept': 'text/event-stream, application/json, */*',
         'Accept-Language': 'en-US,en;q=0.9',
       },
-      timeout: 5000, // 5 second timeout
+      timeout: 3000, // 3 second timeout for faster response
       maxRedirects: 5,
       responseType: 'text'
     });
 
-    // Parse SSE format - extract the last complete data line
-    const lines = response.data.split('\n');
-    let lastDataLine = null;
-    
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const line = lines[i].trim();
-      if (line.startsWith('data: ')) {
-        const jsonStr = line.substring(6);
-        try {
-          JSON.parse(jsonStr);
-          lastDataLine = jsonStr;
-          break;
-        } catch (e) {
-          continue;
+    // Try to parse as JSON first (in case it's not SSE format)
+    let rateData = null;
+    try {
+      rateData = JSON.parse(response.data);
+    } catch (jsonError) {
+      // If not JSON, parse as SSE format - extract the last complete data line
+      const lines = response.data.split('\n');
+      let lastDataLine = null;
+      
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i].trim();
+        if (line.startsWith('data: ')) {
+          const jsonStr = line.substring(6);
+          try {
+            rateData = JSON.parse(jsonStr);
+            break;
+          } catch (e) {
+            continue;
+          }
+        } else if (line.startsWith('{') && line.endsWith('}')) {
+          // Try parsing as direct JSON line
+          try {
+            rateData = JSON.parse(line);
+            break;
+          } catch (e) {
+            continue;
+          }
         }
       }
     }
 
-    if (!lastDataLine) {
+    if (!rateData) {
+      console.warn('⚠️ No valid data found in Vercel stream response');
       return null;
     }
 
-    const rateData = JSON.parse(lastDataLine);
     let ratePerKg = null;
     let ratePerGram = null;
 
+    // Handle different response formats
     if (rateData.prices && Array.isArray(rateData.prices)) {
+      // Format: { prices: [...] }
       let silver999 = rateData.prices.find(
         item => item.name && item.name.toLowerCase() === 'silver 999'
       );
@@ -147,6 +162,13 @@ const fetchFromVercel = async () => {
       if (!silver999) {
         silver999 = rateData.prices.find(
           item => item.name && item.name.toLowerCase().includes('silver 999')
+        );
+      }
+      
+      if (!silver999) {
+        // Try to find any silver item
+        silver999 = rateData.prices.find(
+          item => item.name && item.name.toLowerCase().includes('silver')
         );
       }
       
@@ -163,7 +185,24 @@ const fetchFromVercel = async () => {
             ratePerGram = ratePerKg / 1000;
           }
         }
+        // Try price field
+        if (!ratePerGram && silver999.price) {
+          const price = parseFloat(silver999.price);
+          if (!isNaN(price) && price > 0) {
+            ratePerKg = price > 1000 ? price : price * 1000;
+            ratePerGram = price > 1000 ? price / 1000 : price;
+          }
+        }
       }
+    } else if (rateData.ratePerGram) {
+      // Direct format: { ratePerGram: 168.39, ... }
+      ratePerGram = parseFloat(rateData.ratePerGram);
+      ratePerKg = ratePerGram * 1000;
+    } else if (rateData.rate) {
+      // Format: { rate: 168390, ... }
+      const rate = parseFloat(rateData.rate);
+      ratePerGram = rate > 1000 ? rate / 1000 : rate;
+      ratePerKg = rate > 1000 ? rate : rate * 1000;
     }
 
     // Try to extract USD-INR rate from Vercel response
@@ -175,6 +214,8 @@ const fetchFromVercel = async () => {
       if (usdInr && usdInr.ask && usdInr.ask !== '-') {
         usdInrRate = parseFloat(usdInr.ask);
       }
+    } else if (rateData.usdInrRate || rateData.usdRate) {
+      usdInrRate = parseFloat(rateData.usdInrRate || rateData.usdRate);
     }
 
     if (ratePerGram && ratePerGram > 0 && !isNaN(ratePerGram)) {
@@ -187,8 +228,11 @@ const fetchFromVercel = async () => {
         usdInrRate: usdInrRate || 89.25 // Default if not found
       };
     }
+    
+    console.warn('⚠️ Could not extract valid rate from Vercel response');
     return null;
   } catch (error) {
+    console.error('❌ Error fetching from Vercel stream:', error.message);
     return null;
   }
 };
