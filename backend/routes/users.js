@@ -41,7 +41,9 @@ router.get('/', async (req, res) => {
             description: 'Get or update user profile (requires authentication)'
           }
         }
-      });
+        });
+        return;
+      }
     }
 
     const { status, limit = 10, page = 1 } = req.query;

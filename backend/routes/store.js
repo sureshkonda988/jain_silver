@@ -45,7 +45,9 @@ router.get('/', async (req, res) => {
             branch: 'Branch Name',
           }
         ]
-      });
+        });
+        return;
+      }
     }
     
     const storeInfo = await StoreInfo.getStoreInfo();

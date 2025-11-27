@@ -43,7 +43,9 @@ router.get('/', auth, adminAuth, async (req, res) => {
           approveUser: 'PUT /api/admin/approve-user/:userId',
           rejectUser: 'PUT /api/admin/reject-user/:userId'
         }
-      });
+        });
+        return;
+      }
     }
 
     const totalUsers = await User.countDocuments();
