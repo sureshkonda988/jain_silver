@@ -5,6 +5,11 @@ const http = require('http');
 const socketIo = require('socket.io');
 require('dotenv').config();
 
+// Platform detection
+const { platform, database, server: serverConfig } = require('./config/platform');
+console.log(`🚀 Running on platform: ${platform.name.toUpperCase()}`);
+console.log(`📦 Platform details:`, require('./config/platform').getConfig());
+
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
@@ -49,14 +54,16 @@ const connectDB = async () => {
       }
     }
 
-    // Connect with optimized settings for serverless
+    // Connect with platform-optimized settings
     const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/jain_silver', {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000,
-      maxPoolSize: 10,
-      minPoolSize: 1,
+      serverSelectionTimeoutMS: database.serverSelectionTimeoutMS,
+      socketTimeoutMS: database.socketTimeoutMS,
+      maxPoolSize: database.maxPoolSize,
+      minPoolSize: database.minPoolSize,
+      retryWrites: database.retryWrites,
+      retryReads: database.retryReads,
     });
     console.log('MongoDB Connected');
     return conn;
@@ -113,26 +120,37 @@ app.use('/api/admin', require('./routes/admin'));
 app.use('/api/rates', require('./routes/rates'));
 app.use('/api/store', require('./routes/store'));
 
-// Socket.io for real-time updates
-io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
-  
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
+// Socket.io for real-time updates (only if enabled for platform)
+if (serverConfig.enableSocketIO) {
+  io.on('connection', (socket) => {
+    console.log('Client connected:', socket.id);
+    
+    socket.on('disconnect', () => {
+      console.log('Client disconnected:', socket.id);
+    });
   });
-});
+  
+  // Store io instance for use in routes
+  app.set('io', io);
+} else {
+  console.log('⚠️  Socket.io disabled for this platform (serverless)');
+  app.set('io', null);
+}
 
-// Store io instance for use in routes
-app.set('io', io);
-
-// Always export app (needed for Vercel)
-// For Vercel, we export the app directly (no server startup)
-if (process.env.VERCEL) {
-  // Note: Socket.io won't work on Vercel serverless functions
-  // The app will use HTTP polling as fallback
+// Platform-specific initialization
+if (platform.isVercel) {
   console.log('🚀 Running on Vercel (serverless mode)');
   console.log('⚠️  Socket.io WebSocket connections are not supported on Vercel');
   console.log('📡 Real-time updates will use HTTP polling fallback');
+} else if (platform.isAWS) {
+  console.log('☁️  Running on AWS');
+  console.log('✅ Full features enabled (Socket.io, rate updater)');
+} else if (platform.isDocker) {
+  console.log('🐳 Running in Docker container');
+  console.log('✅ Full features enabled');
+} else {
+  console.log('💻 Running locally');
+  console.log('✅ Full features enabled');
 }
 
 // Export app for both Vercel and local development
@@ -232,14 +250,23 @@ mongoose.connection.once('open', async () => {
       console.error('❌ Error initializing store info:', storeError.message || storeError);
     }
     
-    // Start rate updater
-    console.log('🔄 Starting rate updater...');
-    try {
-      const { startRateUpdater } = require('./utils/rateUpdater');
-      startRateUpdater(io);
-      console.log('✅ Rate updater started (updates every second)');
-    } catch (updaterError) {
-      console.error('❌ Error starting rate updater:', updaterError.message || updaterError);
+    // Start rate updater (only if enabled for platform)
+    if (serverConfig.enableRateUpdater) {
+      console.log('🔄 Starting rate updater...');
+      try {
+        const { startRateUpdater } = require('./utils/rateUpdater');
+        const io = app.get('io');
+        if (io) {
+          startRateUpdater(io);
+          console.log('✅ Rate updater started (updates every second)');
+        } else {
+          console.log('⚠️  Rate updater skipped (Socket.io not available)');
+        }
+      } catch (updaterError) {
+        console.error('❌ Error starting rate updater:', updaterError.message || updaterError);
+      }
+    } else {
+      console.log('⚠️  Rate updater disabled for serverless platform');
     }
     
     console.log('🎉 Server initialization completed successfully!');

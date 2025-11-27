@@ -1,6 +1,8 @@
 const multer = require('multer');
-const { uploadToS3 } = require('./s3Upload');
 const path = require('path');
+const fs = require('fs');
+const { uploadToS3 } = require('./s3Upload');
+const { platform, fileStorage } = require('../config/platform');
 
 // Custom storage for multer that uploads to S3
 const s3Storage = multer.memoryStorage();
@@ -19,7 +21,7 @@ const upload = multer({
   }
 });
 
-// Middleware to upload files to S3 after multer processes them
+// Middleware to upload files to S3 or local storage based on platform
 const uploadToS3Middleware = async (req, res, next) => {
   try {
     if (req.files) {
@@ -27,23 +29,61 @@ const uploadToS3Middleware = async (req, res, next) => {
         const files = Array.isArray(req.files[fieldName]) ? req.files[fieldName] : [req.files[fieldName]];
         for (const file of files) {
           if (file.buffer) {
-            const { key, url } = await uploadToS3(
-              file.buffer,
-              file.originalname,
-              'documents',
-              file.mimetype
-            );
-            file.location = url;
-            file.key = key;
+            // Use S3 if configured and available
+            if (fileStorage.useS3) {
+              try {
+                const { key, url } = await uploadToS3(
+                  file.buffer,
+                  file.originalname,
+                  'documents',
+                  file.mimetype
+                );
+                file.location = url;
+                file.key = key;
+                file.storage = 's3';
+              } catch (s3Error) {
+                console.error('S3 upload failed, falling back to local:', s3Error);
+                // Fallback to local if S3 fails and platform allows it
+                if (fileStorage.fallbackToLocal) {
+                  await saveToLocal(file);
+                } else {
+                  throw s3Error; // Vercel requires S3
+                }
+              }
+            } else if (fileStorage.fallbackToLocal) {
+              // Use local storage
+              await saveToLocal(file);
+            } else {
+              throw new Error('File storage not configured. S3 is required for this platform.');
+            }
           }
         }
       }
     }
     next();
   } catch (error) {
-    console.error('S3 upload middleware error:', error);
+    console.error('File upload middleware error:', error);
     return res.status(500).json({ message: 'File upload failed', error: error.message });
   }
+};
+
+// Save file to local storage (for non-Vercel, non-AWS deployments)
+const saveToLocal = async (file) => {
+  const uploadPath = 'uploads/documents';
+  if (!fs.existsSync(uploadPath)) {
+    fs.mkdirSync(uploadPath, { recursive: true });
+  }
+  
+  const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+  const filename = `${file.fieldname}-${uniqueSuffix}${path.extname(file.originalname)}`;
+  const filepath = path.join(uploadPath, filename);
+  
+  fs.writeFileSync(filepath, file.buffer);
+  
+  file.location = `/uploads/documents/${filename}`;
+  file.path = filepath;
+  file.filename = filename;
+  file.storage = 'local';
 };
 
 // Helper to get CloudFront URL from S3 location
