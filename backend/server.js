@@ -112,10 +112,14 @@ const connectDB = async () => {
     };
     
     const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/jain_silver', dbConfig);
-    console.log('MongoDB Connected');
+    console.log('✅ MongoDB Connected');
     return conn;
   } catch (err) {
-    console.error('MongoDB connection error:', err);
+    console.error('❌ MongoDB connection error:', err.message || err);
+    if (err.message && err.message.includes('whitelist')) {
+      console.error('⚠️  IP Whitelist Issue: Add 0.0.0.0/0 to MongoDB Atlas Network Access');
+      console.error('📖 See: backend/MONGODB_VERCEL_SETUP.md for instructions');
+    }
     // Don't throw in serverless - let routes handle it gracefully
     if (!process.env.VERCEL) {
       throw err;

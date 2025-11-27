@@ -12,8 +12,12 @@ const fs = require('fs');
 router.get('/', async (req, res) => {
   try {
     const mongoose = require('mongoose');
+    
     // Check MongoDB connection
-    if (mongoose.connection.readyState !== 1) {
+    let isConnected = false;
+    if (mongoose.connection.readyState === 1) {
+      isConnected = true;
+    } else {
       // Try to connect
       try {
         await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/jain_silver', {
@@ -21,9 +25,16 @@ router.get('/', async (req, res) => {
           useUnifiedTopology: true,
           serverSelectionTimeoutMS: 5000,
         });
+        isConnected = true;
       } catch (connError) {
-        console.error('MongoDB connection failed, returning default stats:', connError);
-        return res.json({
+        console.error('MongoDB connection failed:', connError.message);
+        isConnected = false;
+      }
+    }
+
+    // If not connected, return default stats
+    if (!isConnected) {
+      return res.json({
         message: 'Auth API',
         statistics: {
           totalUsers: 0,
@@ -31,7 +42,7 @@ router.get('/', async (req, res) => {
           approvedUsers: 0,
           pendingUsers: 0,
           adminUsers: 0,
-          note: 'MongoDB connection not ready'
+          note: 'MongoDB connection not ready. Please check IP whitelist in MongoDB Atlas.'
         },
         endpoints: {
           register: 'POST /api/auth/register',
@@ -46,6 +57,7 @@ router.get('/', async (req, res) => {
       });
     }
 
+    // Get statistics from MongoDB
     const totalUsers = await User.countDocuments();
     const verifiedUsers = await User.countDocuments({ isVerified: true });
     const approvedUsers = await User.countDocuments({ status: 'approved' });
