@@ -27,6 +27,7 @@ app.options('*', cors());
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Note: File uploads now go to S3, but keep static route for backward compatibility
 app.use('/uploads', express.static('uploads'));
 
 // Database connection - optimized for Vercel serverless

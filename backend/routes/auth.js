@@ -78,34 +78,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadPath = 'uploads/documents';
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true });
-    }
-    cb(null, uploadPath);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-const upload = multer({ 
-  storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|pdf/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-    if (mimetype && extname) {
-      return cb(null, true);
-    }
-    cb(new Error('Only images and PDF files are allowed'));
-  }
-});
+// Configure multer for S3 file uploads
+const { upload, getFileUrl } = require('../utils/multerS3');
 
 // Generate JWT token
 const generateToken = (userId) => {
@@ -136,6 +110,7 @@ router.post('/register',
       next();
     });
   },
+  require('../utils/multerS3').uploadToS3Middleware,
   [
     body('name').trim().notEmpty().withMessage('Name is required'),
     body('email').isEmail().withMessage('Valid email is required'),
@@ -209,15 +184,15 @@ router.post('/register',
         });
       }
 
-      // Save documents
+      // Get CloudFront URLs from S3 uploads
       const documents = {
         aadhar: {
-          front: req.files.aadharFront[0].filename,
-          back: req.files.aadharBack[0].filename,
+          front: getFileUrl(req.files.aadharFront[0].location) || req.files.aadharFront[0].key,
+          back: getFileUrl(req.files.aadharBack[0].location) || req.files.aadharBack[0].key,
           number: aadharNumber.trim()
         },
         pan: {
-          image: req.files.panImage[0].filename,
+          image: getFileUrl(req.files.panImage[0].location) || req.files.panImage[0].key,
           number: panNumber.trim().toUpperCase()
         }
       };
