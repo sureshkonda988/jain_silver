@@ -5,20 +5,20 @@
 
 // Available rate sources
 const RATE_SOURCES = {
-  // Option 1: RB Goldspot (fallback)
+  // Option 1: RB Goldspot (Primary source - reliable and working)
   RB_GOLDSPOT: {
     name: 'RB Goldspot',
     url: 'https://bcast.rbgoldspot.com:7768/VOTSBroadcastStreaming/Services/xml/GetLiveRateByTemplateID/rbgold',
     enabled: true,
-    priority: 2, // Fallback if Vercel fails
+    priority: 1, // Primary source - most reliable
   },
   
-  // Option 2: Vercel endpoint (Primary source for live rates)
+  // Option 2: Vercel endpoint (Secondary - currently having issues)
   VERCEL: {
     name: 'Vercel',
     url: 'https://jainsilverpp1.vercel.app/prices/stream',
-    enabled: true,
-    priority: 1, // Highest priority - use this as primary source
+    enabled: false, // Disabled due to ERR_BAD_RESPONSE errors
+    priority: 2,
   },
   
   // Option 3: Custom endpoint (add your own)
@@ -35,8 +35,8 @@ const RATE_SOURCES = {
 // Options: 'RB_GOLDSPOT', 'VERCEL', 'CUSTOM', or 'MULTI'
 // 'MULTI' will try all enabled sources in priority order (recommended for reliability)
 // Set via RATE_SOURCE environment variable or change default below
-// Default to MULTI to use both Vercel stream and RB Goldspot for maximum reliability
-const ACTIVE_RATE_SOURCE = process.env.RATE_SOURCE || 'MULTI';
+// Default to RB_GOLDSPOT for reliable live rates (Vercel stream has ERR_BAD_RESPONSE issues)
+const ACTIVE_RATE_SOURCE = process.env.RATE_SOURCE || 'RB_GOLDSPOT';
 
 // If MULTI, it will try all enabled sources in priority order
 // If a specific source name, it will only use that source

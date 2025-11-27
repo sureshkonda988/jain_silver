@@ -40,66 +40,73 @@ router.get('/', async (req, res) => {
       // No valid token, but we'll still return rates for public viewing
     }
     
-    // Fetch live rates from jainsilverpp1.vercel.app/prices/stream
+    // Fetch live rates - NO FALLBACK, must get live data
     let liveRate = null;
     let ratesUpdated = false;
     try {
-      console.log('🔄 Fetching live rates from stream endpoint...');
+      console.log('🔄 Fetching live rates (NO FALLBACK - must succeed)...');
       const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
       liveRate = await fetchSilverRatesFromMultipleSources();
       
-      if (liveRate && liveRate.ratePerGram && liveRate.ratePerGram > 0) {
-        console.log(`✅ Fetched live rate: ₹${liveRate.ratePerGram}/gram (₹${liveRate.ratePerKg}/kg) from ${liveRate.source}`);
+      if (!liveRate || !liveRate.ratePerGram || liveRate.ratePerGram <= 0) {
+        console.error('❌ Failed to fetch live rate - NO FALLBACK ALLOWED');
+        return res.status(503).json({ 
+          message: 'Live rate service unavailable', 
+          error: 'Unable to fetch live rates. Please try again in a moment.',
+          retryAfter: 2
+        });
+      }
+      
+      console.log(`✅ Fetched live rate: ₹${liveRate.ratePerGram}/gram (₹${liveRate.ratePerKg}/kg) from ${liveRate.source}`);
+      
+      // Update all rates in MongoDB with live data
+      const rates = await SilverRate.find({ location: 'Andhra Pradesh' });
+      const baseRatePerGram = liveRate.ratePerGram;
+      let updatedCount = 0;
+      
+      for (const rate of rates) {
+        if (!rate.weight || !rate.weight.value) continue;
         
-        // Update all rates in MongoDB with live data
-        const rates = await SilverRate.find({ location: 'Andhra Pradesh' });
-        const baseRatePerGram = liveRate.ratePerGram;
-        let updatedCount = 0;
-        
-        for (const rate of rates) {
-          if (!rate.weight || !rate.weight.value) continue;
-          
-          // Calculate rate per gram based on purity
-          let ratePerGram = baseRatePerGram;
-          if (rate.purity === '92.5%') {
-            ratePerGram = baseRatePerGram * 0.96;
-          } else if (rate.purity === '99.99%') {
-            ratePerGram = baseRatePerGram * 1.005;
-          }
-          
-          const oldRatePerGram = rate.ratePerGram;
-          rate.ratePerGram = Math.round(ratePerGram * 100) / 100;
-          
-          // Calculate total rate based on weight
-          let weightInGrams = rate.weight.value;
-          if (rate.weight.unit === 'kg') {
-            weightInGrams = rate.weight.value * 1000;
-          } else if (rate.weight.unit === 'oz') {
-            weightInGrams = rate.weight.value * 28.35;
-          }
-          
-          rate.rate = Math.round(rate.ratePerGram * weightInGrams * 100) / 100;
-          rate.lastUpdated = new Date();
-          await rate.save();
-          
-          if (oldRatePerGram !== rate.ratePerGram) {
-            updatedCount++;
-            console.log(`  📊 Updated ${rate.name}: ₹${oldRatePerGram}/gram → ₹${rate.ratePerGram}/gram`);
-          }
+        // Calculate rate per gram based on purity
+        let ratePerGram = baseRatePerGram;
+        if (rate.purity === '92.5%') {
+          ratePerGram = baseRatePerGram * 0.96;
+        } else if (rate.purity === '99.99%') {
+          ratePerGram = baseRatePerGram * 1.005;
         }
         
-        ratesUpdated = updatedCount > 0;
-        console.log(`✅ Updated ${updatedCount} rates with live data`);
-      } else {
-        console.warn('⚠️ Failed to fetch live rate, using cached rates from MongoDB');
-        if (liveRate) {
-          console.warn('  Live rate data:', liveRate);
+        const oldRatePerGram = rate.ratePerGram;
+        rate.ratePerGram = Math.round(ratePerGram * 100) / 100;
+        
+        // Calculate total rate based on weight
+        let weightInGrams = rate.weight.value;
+        if (rate.weight.unit === 'kg') {
+          weightInGrams = rate.weight.value * 1000;
+        } else if (rate.weight.unit === 'oz') {
+          weightInGrams = rate.weight.value * 28.35;
+        }
+        
+        rate.rate = Math.round(rate.ratePerGram * weightInGrams * 100) / 100;
+        rate.lastUpdated = new Date();
+        await rate.save();
+        
+        if (oldRatePerGram !== rate.ratePerGram) {
+          updatedCount++;
+          console.log(`  📊 Updated ${rate.name}: ₹${oldRatePerGram}/gram → ₹${rate.ratePerGram}/gram`);
         }
       }
+      
+      ratesUpdated = updatedCount > 0;
+      console.log(`✅ Updated ${updatedCount} rates with live data`);
     } catch (rateFetchError) {
       console.error('❌ Error fetching live rates:', rateFetchError.message);
       console.error('  Stack:', rateFetchError.stack);
-      // Continue with cached rates from MongoDB
+      // NO FALLBACK - return error instead of cached rates
+      return res.status(503).json({ 
+        message: 'Live rate service error', 
+        error: rateFetchError.message || 'Unable to fetch live rates. Please try again.',
+        retryAfter: 2
+      });
     }
     
     // Return updated rates from MongoDB
