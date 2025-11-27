@@ -102,32 +102,42 @@ const fetchFromRBGoldspot = async () => {
 // Fetch from Vercel (SSE format) - Primary source for live rates
 const fetchFromVercel = async () => {
   try {
+    console.log('📡 Fetching live rates from jainsilverpp1.vercel.app/prices/stream...');
     const response = await axios.get('https://jainsilverpp1.vercel.app/prices/stream', {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'text/event-stream, application/json, */*',
         'Accept-Language': 'en-US,en;q=0.9',
       },
-      timeout: 3000, // 3 second timeout for faster response
+      timeout: 5000, // 5 second timeout
       maxRedirects: 5,
       responseType: 'text'
     });
+
+    console.log('✅ Received response from stream endpoint');
+    console.log('Response length:', response.data?.length || 0);
+    console.log('Response preview:', response.data?.substring(0, 200) || 'No data');
 
     // Try to parse as JSON first (in case it's not SSE format)
     let rateData = null;
     try {
       rateData = JSON.parse(response.data);
+      console.log('✅ Parsed as JSON');
     } catch (jsonError) {
       // If not JSON, parse as SSE format - extract the last complete data line
+      console.log('⚠️ Not JSON, trying SSE format...');
       const lines = response.data.split('\n');
       let lastDataLine = null;
       
       for (let i = lines.length - 1; i >= 0; i--) {
         const line = lines[i].trim();
+        if (!line) continue;
+        
         if (line.startsWith('data: ')) {
           const jsonStr = line.substring(6);
           try {
             rateData = JSON.parse(jsonStr);
+            console.log('✅ Parsed SSE data line');
             break;
           } catch (e) {
             continue;
@@ -136,6 +146,7 @@ const fetchFromVercel = async () => {
           // Try parsing as direct JSON line
           try {
             rateData = JSON.parse(line);
+            console.log('✅ Parsed direct JSON line');
             break;
           } catch (e) {
             continue;
@@ -146,8 +157,17 @@ const fetchFromVercel = async () => {
 
     if (!rateData) {
       console.warn('⚠️ No valid data found in Vercel stream response');
+      console.warn('Response data:', response.data?.substring(0, 500));
       return null;
     }
+
+    console.log('📊 Rate data structure:', {
+      hasPrices: !!rateData.prices,
+      pricesLength: rateData.prices?.length || 0,
+      hasRatePerGram: !!rateData.ratePerGram,
+      hasRate: !!rateData.rate,
+      keys: Object.keys(rateData)
+    });
 
     let ratePerKg = null;
     let ratePerGram = null;
@@ -155,6 +175,15 @@ const fetchFromVercel = async () => {
     // Handle different response formats
     if (rateData.prices && Array.isArray(rateData.prices)) {
       // Format: { prices: [...] }
+      console.log('📋 Found prices array with', rateData.prices.length, 'items');
+      
+      // Log all price items for debugging
+      rateData.prices.forEach((item, index) => {
+        if (item.name && item.name.toLowerCase().includes('silver')) {
+          console.log(`  [${index}] ${item.name}: ask=${item.ask}, bid=${item.bid}, price=${item.price}`);
+        }
+      });
+      
       let silver999 = rateData.prices.find(
         item => item.name && item.name.toLowerCase() === 'silver 999'
       );
@@ -173,16 +202,19 @@ const fetchFromVercel = async () => {
       }
       
       if (silver999) {
+        console.log('✅ Found silver item:', silver999.name);
         if (silver999.ask && silver999.ask !== '-' && silver999.ask !== '') {
           ratePerKg = parseFloat(silver999.ask);
           if (!isNaN(ratePerKg) && ratePerKg > 0) {
             ratePerGram = ratePerKg / 1000;
+            console.log(`✅ Using ask price: ₹${ratePerKg}/kg = ₹${ratePerGram}/gram`);
           }
         }
         if (!ratePerGram && silver999.bid && silver999.bid !== '-' && silver999.bid !== '') {
           ratePerKg = parseFloat(silver999.bid);
           if (!isNaN(ratePerKg) && ratePerKg > 0) {
             ratePerGram = ratePerKg / 1000;
+            console.log(`✅ Using bid price: ₹${ratePerKg}/kg = ₹${ratePerGram}/gram`);
           }
         }
         // Try price field
@@ -191,18 +223,31 @@ const fetchFromVercel = async () => {
           if (!isNaN(price) && price > 0) {
             ratePerKg = price > 1000 ? price : price * 1000;
             ratePerGram = price > 1000 ? price / 1000 : price;
+            console.log(`✅ Using price field: ₹${ratePerKg}/kg = ₹${ratePerGram}/gram`);
           }
         }
+        // Try ratePerGram field directly
+        if (!ratePerGram && silver999.ratePerGram) {
+          ratePerGram = parseFloat(silver999.ratePerGram);
+          ratePerKg = ratePerGram * 1000;
+          console.log(`✅ Using ratePerGram field: ₹${ratePerGram}/gram`);
+        }
+      } else {
+        console.warn('⚠️ No silver item found in prices array');
       }
     } else if (rateData.ratePerGram) {
       // Direct format: { ratePerGram: 168.39, ... }
+      console.log('✅ Found ratePerGram directly:', rateData.ratePerGram);
       ratePerGram = parseFloat(rateData.ratePerGram);
       ratePerKg = ratePerGram * 1000;
     } else if (rateData.rate) {
       // Format: { rate: 168390, ... }
+      console.log('✅ Found rate field:', rateData.rate);
       const rate = parseFloat(rateData.rate);
       ratePerGram = rate > 1000 ? rate / 1000 : rate;
       ratePerKg = rate > 1000 ? rate : rate * 1000;
+    } else {
+      console.warn('⚠️ Unknown rate data format:', Object.keys(rateData));
     }
 
     // Try to extract USD-INR rate from Vercel response
@@ -378,4 +423,5 @@ const fetchSilverRatesFromMultipleSources = async () => {
 };
 
 module.exports = { fetchSilverRatesFromMultipleSources };
+
 

@@ -42,16 +42,19 @@ router.get('/', async (req, res) => {
     
     // Fetch live rates from jainsilverpp1.vercel.app/prices/stream
     let liveRate = null;
+    let ratesUpdated = false;
     try {
+      console.log('🔄 Fetching live rates from stream endpoint...');
       const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
       liveRate = await fetchSilverRatesFromMultipleSources();
       
       if (liveRate && liveRate.ratePerGram && liveRate.ratePerGram > 0) {
-        console.log(`✅ Fetched live rate: ₹${liveRate.ratePerGram}/gram from ${liveRate.source}`);
+        console.log(`✅ Fetched live rate: ₹${liveRate.ratePerGram}/gram (₹${liveRate.ratePerKg}/kg) from ${liveRate.source}`);
         
         // Update all rates in MongoDB with live data
         const rates = await SilverRate.find({ location: 'Andhra Pradesh' });
         const baseRatePerGram = liveRate.ratePerGram;
+        let updatedCount = 0;
         
         for (const rate of rates) {
           if (!rate.weight || !rate.weight.value) continue;
@@ -64,6 +67,7 @@ router.get('/', async (req, res) => {
             ratePerGram = baseRatePerGram * 1.005;
           }
           
+          const oldRatePerGram = rate.ratePerGram;
           rate.ratePerGram = Math.round(ratePerGram * 100) / 100;
           
           // Calculate total rate based on weight
@@ -77,12 +81,24 @@ router.get('/', async (req, res) => {
           rate.rate = Math.round(rate.ratePerGram * weightInGrams * 100) / 100;
           rate.lastUpdated = new Date();
           await rate.save();
+          
+          if (oldRatePerGram !== rate.ratePerGram) {
+            updatedCount++;
+            console.log(`  📊 Updated ${rate.name}: ₹${oldRatePerGram}/gram → ₹${rate.ratePerGram}/gram`);
+          }
         }
+        
+        ratesUpdated = updatedCount > 0;
+        console.log(`✅ Updated ${updatedCount} rates with live data`);
       } else {
-        console.warn('⚠️ Failed to fetch live rate, using cached rates');
+        console.warn('⚠️ Failed to fetch live rate, using cached rates from MongoDB');
+        if (liveRate) {
+          console.warn('  Live rate data:', liveRate);
+        }
       }
     } catch (rateFetchError) {
-      console.error('⚠️ Error fetching live rates:', rateFetchError.message);
+      console.error('❌ Error fetching live rates:', rateFetchError.message);
+      console.error('  Stack:', rateFetchError.stack);
       // Continue with cached rates from MongoDB
     }
     
