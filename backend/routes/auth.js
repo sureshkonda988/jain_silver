@@ -136,17 +136,24 @@ router.post('/register',
   },
   async (req, res, next) => {
     try {
-      // Try to upload to S3, but don't fail if it's not available
+      // Upload files to S3
       const multerS3 = require('../utils/multerS3');
-      if (multerS3.uploadToS3Middleware) {
+      if (multerS3.uploadToS3Middleware && req.files) {
+        console.log('📤 Uploading files to S3...');
         await multerS3.uploadToS3Middleware(req, res, next);
       } else {
+        console.log('⚠️ S3 middleware not available or no files, skipping S3 upload');
         next();
       }
     } catch (s3Error) {
-      console.error('⚠️ S3 upload middleware error (continuing anyway):', s3Error.message);
-      // Continue without S3 upload - files will be stored in memory
-      next();
+      console.error('❌ S3 upload middleware error:', s3Error.message);
+      console.error('Error stack:', s3Error.stack);
+      // Return error - S3 is required for document storage
+      return res.status(500).json({ 
+        message: 'File upload service unavailable', 
+        error: 'Unable to upload documents. Please check S3 configuration.',
+        details: process.env.NODE_ENV === 'development' ? s3Error.message : undefined
+      });
     }
   },
   [
@@ -258,14 +265,62 @@ router.post('/register',
         const aadharBackFile = Array.isArray(req.files.aadharBack) ? req.files.aadharBack[0] : req.files.aadharBack;
         const panImageFile = Array.isArray(req.files.panImage) ? req.files.panImage[0] : req.files.panImage;
 
+        console.log('📄 Processing file locations:', {
+          aadharFront: {
+            location: aadharFrontFile?.location,
+            key: aadharFrontFile?.key,
+            storage: aadharFrontFile?.storage
+          },
+          aadharBack: {
+            location: aadharBackFile?.location,
+            key: aadharBackFile?.key,
+            storage: aadharBackFile?.storage
+          },
+          panImage: {
+            location: panImageFile?.location,
+            key: panImageFile?.key,
+            storage: panImageFile?.storage
+          }
+        });
+
+        // Get file URLs - prefer location (CloudFront URL) over key (S3 key)
+        const getDocumentUrl = (file) => {
+          if (!file) return null;
+          if (file.location) {
+            // Already a CloudFront URL
+            return file.location;
+          }
+          if (file.key && getFileUrl) {
+            // Convert S3 key to CloudFront URL
+            return getFileUrl(file.key);
+          }
+          return null;
+        };
+
+        const aadharFrontUrl = getDocumentUrl(aadharFrontFile);
+        const aadharBackUrl = getDocumentUrl(aadharBackFile);
+        const panImageUrl = getDocumentUrl(panImageFile);
+
+        if (!aadharFrontUrl || !aadharBackUrl || !panImageUrl) {
+          console.error('❌ Missing document URLs after upload:', {
+            aadharFront: !!aadharFrontUrl,
+            aadharBack: !!aadharBackUrl,
+            panImage: !!panImageUrl
+          });
+          return res.status(500).json({ 
+            message: 'Failed to process document uploads', 
+            error: 'Document files were not properly uploaded. Please try again.'
+          });
+        }
+
         documents = {
           aadhar: {
-            front: getFileUrl ? (getFileUrl(aadharFrontFile.location) || aadharFrontFile.key || 'pending') : 'pending',
-            back: getFileUrl ? (getFileUrl(aadharBackFile.location) || aadharBackFile.key || 'pending') : 'pending',
+            front: aadharFrontUrl,
+            back: aadharBackUrl,
             number: aadharNumber.trim()
           },
           pan: {
-            image: getFileUrl ? (getFileUrl(panImageFile.location) || panImageFile.key || 'pending') : 'pending',
+            image: panImageUrl,
             number: panNumber.trim().toUpperCase()
           }
         };
@@ -277,6 +332,7 @@ router.post('/register',
         });
       } catch (docError) {
         console.error('❌ Error processing document URLs:', docError);
+        console.error('Error stack:', docError.stack);
         return res.status(500).json({ 
           message: 'Error processing document files', 
           error: docError.message 
