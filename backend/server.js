@@ -72,7 +72,7 @@ io.on('connection', (socket) => {
 // Store io instance for use in routes
 app.set('io', io);
 
-// Export app for Vercel serverless functions
+// Always export app (needed for Vercel)
 // For Vercel, we export the app directly (no server startup)
 if (process.env.VERCEL) {
   // Note: Socket.io won't work on Vercel serverless functions
@@ -80,8 +80,14 @@ if (process.env.VERCEL) {
   console.log('🚀 Running on Vercel (serverless mode)');
   console.log('⚠️  Socket.io WebSocket connections are not supported on Vercel');
   console.log('📡 Real-time updates will use HTTP polling fallback');
-  module.exports = app;
-} else {
+}
+
+// Export app for both Vercel and local development
+// Vercel will use this export, local dev will start server below
+module.exports = app;
+
+// Only start server if not on Vercel
+if (!process.env.VERCEL) {
   // Start server - listen on all network interfaces (for local development)
   const PORT = process.env.PORT || 5000;
   const HOST = process.env.HOST || '0.0.0.0'; // Listen on all interfaces
