@@ -113,6 +113,13 @@ router.get('/', async (req, res) => {
       });
     }
     
+    // Add metadata about live rate fetch
+    if (liveRate) {
+      console.log(`📤 Returning ${rates.length} rates (live rate: ₹${liveRate.ratePerGram}/gram from ${liveRate.source})`);
+    } else {
+      console.log(`📤 Returning ${rates.length} rates from cache (live fetch failed)`);
+    }
+    
     res.json(rates);
   } catch (error) {
     console.error('Get rates error:', error);
