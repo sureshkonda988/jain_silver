@@ -97,6 +97,14 @@ app.options('*', cors());
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Handle multipart/form-data for file uploads - don't parse it, let multer handle it
+app.use((req, res, next) => {
+  if (req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data')) {
+    // Don't parse multipart/form-data - let multer handle it
+    return next();
+  }
+  next();
+});
 // Note: File uploads now go to S3, but keep static route for backward compatibility
 app.use('/uploads', express.static('uploads'));
 

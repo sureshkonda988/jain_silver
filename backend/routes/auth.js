@@ -126,22 +126,51 @@ router.post('/register',
     next();
   }, 
   (req, res, next) => {
-    // Handle multer errors
-    upload.fields([
+    console.log('📦 Multer middleware - Processing file uploads...');
+    console.log('Content-Type:', req.headers['content-type']);
+    console.log('Content-Length:', req.headers['content-length']);
+    
+    // Handle multer errors with timeout
+    const uploadMiddleware = upload.fields([
       { name: 'aadharFront', maxCount: 1 },
       { name: 'aadharBack', maxCount: 1 },
       { name: 'panImage', maxCount: 1 }
-    ])(req, res, (err) => {
+    ]);
+    
+    // Add timeout to multer processing
+    const timeout = setTimeout(() => {
+      console.error('❌ Multer processing timeout after 20 seconds');
+      if (!res.headersSent) {
+        return res.status(408).json({ 
+          message: 'Request timeout - file upload took too long',
+          error: 'Please try again with smaller files or check your connection'
+        });
+      }
+    }, 20000); // 20 second timeout for multer
+    
+    uploadMiddleware(req, res, (err) => {
+      clearTimeout(timeout);
       if (err) {
-        console.error('File upload error:', err);
+        console.error('❌ File upload error:', err);
+        console.error('Error code:', err.code);
+        console.error('Error message:', err.message);
         if (err.code === 'LIMIT_FILE_SIZE') {
-          return res.status(400).json({ message: 'File size too large. Maximum 5MB allowed.' });
+          return res.status(400).json({ message: 'File size too large. Maximum 5MB allowed per file.' });
         }
-        if (err.message.includes('Only images')) {
+        if (err.code === 'LIMIT_FILE_COUNT') {
+          return res.status(400).json({ message: 'Too many files. Maximum 3 files allowed.' });
+        }
+        if (err.message && err.message.includes('Only images')) {
           return res.status(400).json({ message: 'Only image files (JPEG, PNG) are allowed.' });
         }
-        return res.status(400).json({ message: 'File upload error: ' + err.message });
+        return res.status(400).json({ 
+          message: 'File upload error', 
+          error: err.message,
+          code: err.code
+        });
       }
+      console.log('✅ Multer processing completed');
+      console.log('Files received:', req.files ? Object.keys(req.files) : 'No files');
       next();
     });
   },
@@ -151,9 +180,24 @@ router.post('/register',
       const multerS3 = require('../utils/multerS3');
       if (multerS3.uploadToS3Middleware && req.files) {
         console.log('📤 Uploading files to S3...');
-        await multerS3.uploadToS3Middleware(req, res, next);
+        console.log('Files to upload:', Object.keys(req.files));
+        
+        // Add timeout for S3 uploads
+        const uploadPromise = multerS3.uploadToS3Middleware(req, res, next);
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('S3 upload timeout after 30 seconds')), 30000)
+        );
+        
+        await Promise.race([uploadPromise, timeoutPromise]);
       } else {
         console.log('⚠️ S3 middleware not available or no files, skipping S3 upload');
+        if (!req.files) {
+          console.error('❌ No files in request - multer may have failed');
+          return res.status(400).json({ 
+            message: 'No files received', 
+            error: 'Please ensure all document images are uploaded'
+          });
+        }
         next();
       }
     } catch (s3Error) {
@@ -162,7 +206,7 @@ router.post('/register',
       // Return error - S3 is required for document storage
       return res.status(500).json({ 
         message: 'File upload service unavailable', 
-        error: 'Unable to upload documents. Please check S3 configuration.',
+        error: s3Error.message || 'Unable to upload documents. Please check S3 configuration.',
         details: process.env.NODE_ENV === 'development' ? s3Error.message : undefined
       });
     }

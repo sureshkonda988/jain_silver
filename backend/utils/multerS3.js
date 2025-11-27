@@ -9,8 +9,14 @@ const s3Storage = multer.memoryStorage();
 
 const upload = multer({
   storage: s3Storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  limits: { 
+    fileSize: 5 * 1024 * 1024, // 5MB limit per file
+    fieldSize: 10 * 1024 * 1024, // 10MB for fields
+    files: 3, // Maximum 3 files
+    fields: 10 // Maximum 10 fields
+  },
   fileFilter: (req, file, cb) => {
+    console.log(`📎 Processing file: ${file.fieldname} - ${file.originalname} (${file.mimetype})`);
     const allowedTypes = /jpeg|jpg|png|pdf/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
