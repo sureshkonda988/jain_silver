@@ -296,7 +296,7 @@ mongoose.connection.once('open', async () => {
     // Initialize store information if it doesn't exist
     console.log('🏪 Checking store information...');
     try {
-      const StoreInfo = require('./models/StoreInfo');
+      const StoreInfo = require('./models/Store');
       const storeInfo = await StoreInfo.getStoreInfo();
       console.log('✅ Store information initialized/verified');
     } catch (storeError) {

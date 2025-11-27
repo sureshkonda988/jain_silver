@@ -1,16 +1,15 @@
 // Vercel serverless function entry point
 // This file is used when deploying to Vercel
 
-// Set Vercel environment variables first
-if (!process.env.VERCEL) {
-  process.env.VERCEL = 'true';
-}
+// Set Vercel environment variables first - MUST be set before requiring server
+process.env.VERCEL = 'true';
 
 // Import the Express app with comprehensive error handling
 let app;
 
 try {
   // Import server - this will set up the Express app
+  // The server.js file will detect VERCEL=true and configure accordingly
   app = require('../server');
   
   // Verify app is valid
@@ -22,13 +21,20 @@ try {
 } catch (error) {
   console.error('❌ Error loading server:', error.message);
   console.error('Error name:', error.name);
-  console.error('Error stack:', error.stack);
+  if (error.stack) {
+    console.error('Error stack:', error.stack);
+  }
   
   // Create a minimal error handler app
   const express = require('express');
   app = express();
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+  
+  // Health check endpoint
+  app.get('/health', (req, res) => {
+    res.json({ status: 'error', message: 'Server initialization failed' });
+  });
   
   // Error handler route
   app.use((req, res) => {
