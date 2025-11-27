@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const http = require('http');
 const socketIo = require('socket.io');
+const path = require('path');
 require('dotenv').config();
 
 // Platform detection - with comprehensive error handling
@@ -185,32 +186,36 @@ app.get('/', (req, res) => {
 
 // Routes
 // Load routes with error handling - prevent server from crashing if a route fails to load
-const loadRoute = (path, routeName) => {
+const loadRoute = (routePath, routeName) => {
   try {
-    const route = require(path);
+    // Use absolute path to ensure it works on Vercel
+    const routeFile = path.join(__dirname, 'routes', routeName + '.js');
+    const route = require(routeFile);
     app.use(`/api/${routeName}`, route);
-    console.log(`✅ Route loaded: /api/${routeName}`);
+    console.log(`✅ Route loaded: /api/${routeName} from ${routeFile}`);
     return true;
   } catch (error) {
     console.error(`❌ Failed to load route /api/${routeName}:`, error.message);
+    console.error(`   Attempted path: ${path.join(__dirname, 'routes', routeName + '.js')}`);
+    console.error(`   __dirname: ${__dirname}`);
     // Add error route for failed route
     app.use(`/api/${routeName}`, (req, res) => {
       res.status(500).json({ 
         error: 'Route initialization failed', 
         route: routeName,
-        message: error.message 
+        message: error.message,
+        attemptedPath: path.join(__dirname, 'routes', routeName + '.js')
       });
     });
     return false;
   }
 };
 
-// Load all routes
-loadRoute('./routes/auth', 'auth');
-loadRoute('./routes/users', 'users');
-loadRoute('./routes/admin', 'admin');
-loadRoute('./routes/rates', 'rates');
-loadRoute('./routes/store', 'store');
+// Load all routes - use route name for both path and name
+const routeNames = ['auth', 'users', 'admin', 'rates', 'store'];
+routeNames.forEach(routeName => {
+  loadRoute(routeName, routeName);
+});
 
 // Socket.io for real-time updates (only if enabled for platform)
 if (serverConfig && serverConfig.enableSocketIO) {
