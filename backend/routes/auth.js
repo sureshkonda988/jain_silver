@@ -478,8 +478,6 @@ router.post('/register',
       if (error.stack) {
         console.error('🔍 Error stack (first 300 chars):', error.stack.substring(0, 300));
       }
-        name: error.name
-      });
       
       // Handle specific MongoDB errors
       if (error.code === 11000) {
