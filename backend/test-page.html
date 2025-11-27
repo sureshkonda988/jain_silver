@@ -1,0 +1,694 @@
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<!-- Mirrored from rbgold.in/ by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 24 Oct 2018 10:03:41 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=utf-8" /><!-- /Added by HTTrack -->
+<head>
+    
+    <link href="css/ModalBootStrap.css" rel="stylesheet" type="text/css" />
+    <!-- end of modal css -->
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>R B Gold</title>
+
+    <link rel="stylesheet" href="vendor/bootstrap/css/bootstrap.min.css">
+    
+
+    <link rel="stylesheet" type="text/css" href="style.css" />
+    <script src="js/jquery-latest.min.js" type="text/javascript"></script>
+    <script src="js/script.js" type="text/javascript"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <link rel="stylesheet" href="../maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css" />
+    <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+    <link rel="icon" href="favicon.ico" type="image/x-icon" />
+    <script type="text/javascript" src="../ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
+    <script src="../ajax.aspnetcdn.com/ajax/jquery.ui/1.8.9/jquery-ui.js" type="text/javascript"></script>
+    <link href="../ajax.aspnetcdn.com/ajax/jquery.ui/1.8.9/themes/start/jquery-ui.css"
+        rel="stylesheet" type="text/css" />
+		  
+    <script type="text/javascript"> 
+        //On Page Load
+        $(function () {
+            setInterval(function () {
+                runIt();
+            }, 100);
+        });
+
+        //On UpdatePanel Refresh
+        var prm = Sys.WebForms.PageRequestManager.getInstance();
+        if (prm != null) {
+            prm.add_endRequest(function (sender, e) {
+                if (sender._postBackSettings.panelsToUpdate != null) {
+                    setInterval(function () {
+                        runIt();
+                    }, 100);
+                }
+            });
+        };
+
+        function runIt() {
+            var time = 500;
+            //$(".red").not(".Child").fadeIn(time, function () { $(".thumbnail-time").css("color", "white"); }).fadeOut(time, function () {\
+            $(".red").not(".Child").fadeIn(time).fadeOut(time, function () {
+                $(".thumbnail-time").css("color", "black");
+            });
+            $(".green").not(".Child").fadeIn(time).fadeOut(time, function () {
+                $(".thumbnail-time").css("color", "black");
+            });
+        };
+        
+    </script>
+    
+
+     
+    <style>
+        @media (min-width: 500px){
+        
+        .innerdiv
+	           {
+			      /*width:1000px;*/
+			      width:1300px;
+				  float:left;
+				  margin-left:-10rem;
+			   }	
+			   
+			   .content_panel {
+                    width: 1300px;
+			   }
+        
+        }
+        
+        @media (max-width: 499px){
+        
+        .hide-Mobile {
+            display: none;
+        }
+        
+        }
+        
+        
+    </style>
+
+
+    <style>
+        .img-replace {
+  /* replace text with an image */
+  display: inline-block;
+  overflow: hidden;
+  text-indent: 100%; 
+  color: transparent;
+  white-space: nowrap;
+}
+.bts-popup {
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  visibility: hidden;
+  -webkit-transition: opacity 0.3s 0s, visibility 0s 0.3s;
+  -moz-transition: opacity 0.3s 0s, visibility 0s 0.3s;
+  transition: opacity 0.3s 0s, visibility 0s 0.3s;
+}
+.bts-popup.is-visible {
+  opacity: 1;
+  visibility: visible;
+  -webkit-transition: opacity 0.3s 0s, visibility 0s 0s;
+  -moz-transition: opacity 0.3s 0s, visibility 0s 0s;
+  transition: opacity 0.3s 0s, visibility 0s 0s;
+  z-index: 999;
+}
+
+.bts-popup-container {
+  position: relative;
+  width: 90%;
+  max-width: 400px;
+  margin: 4em auto;
+  /*background: #a77225;*/
+  border-radius: none; 
+  text-align: center;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
+  -webkit-transform: translateY(-40px);
+  -moz-transform: translateY(-40px);
+  -ms-transform: translateY(-40px);
+  -o-transform: translateY(-40px);
+  transform: translateY(-40px);
+  /* Force Hardware Acceleration in WebKit */
+  -webkit-backface-visibility: hidden;
+  -webkit-transition-property: -webkit-transform;
+  -moz-transition-property: -moz-transform;
+  transition-property: transform;
+  -webkit-transition-duration: 0.3s;
+  -moz-transition-duration: 0.3s;
+  transition-duration: 0.3s;
+  
+}
+.bts-popup-container img {
+  padding: 20px 0 0 0;
+}
+.bts-popup-container p {
+	color: white;
+  padding: 10px 40px;
+  font-size: 20px;
+}
+.bts-popup-container .bts-popup-button {
+  padding: 5px 25px;
+  border: 2px solid white;
+	display: inline-block;
+  margin-bottom: 10px;
+}
+
+.bts-popup-container a {
+  color: white;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+
+
+
+
+
+.bts-popup-container .bts-popup-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 30px;
+  height: 30px;
+}
+.bts-popup-container .bts-popup-close::before, .bts-popup-container .bts-popup-close::after {
+  content: '';
+  position: absolute;
+  top: 12px;
+  width: 16px;
+  height: 3px;
+  background-color: white;
+}
+.bts-popup-container .bts-popup-close::before {
+  -webkit-transform: rotate(45deg);
+  -moz-transform: rotate(45deg);
+  -ms-transform: rotate(45deg);
+  -o-transform: rotate(45deg);
+  transform: rotate(45deg);
+  left: 8px;
+}
+.bts-popup-container .bts-popup-close::after {
+  -webkit-transform: rotate(-45deg);
+  -moz-transform: rotate(-45deg);
+  -ms-transform: rotate(-45deg);
+  -o-transform: rotate(-45deg);
+  transform: rotate(-45deg);
+  right: 6px;
+  top: 13px;
+}
+.is-visible .bts-popup-container {
+  -webkit-transform: translateY(0);
+  -moz-transform: translateY(0);
+  -ms-transform: translateY(0);
+  -o-transform: translateY(0);
+  transform: translateY(0);
+}
+@media only screen and (min-width: 1170px) {
+  .bts-popup-container {
+    margin: 8em auto;
+  }
+}
+    </style>
+    
+    
+</head>
+<body>
+
+    <div id="myModal" class="modal fade" role="dialog" style="opacity: 1;">
+  <div class="modal-dialog" style="position: fixed;top: 50%;left: 47%;transform: translate(-50%, -50%);width: 90%;">
+    <!-- Modal content-->
+    <div class="modal-content text-center">
+      <div class="modal-header" style="padding: 0rem 1rem;">
+        <button type="button" class="close" data-dismiss="modal" style="font-size:2.5rem;">&times;</button> <!--<span style="font-size:1.5rem;vertical-align: 7px;">Close</span>-->
+      </div>
+      <div class="modal-body" style="text-align: center;display: -webkit-inline-box;padding: 0rem;">
+      
+        <div id="gvDataPopup" style="width:100%">
+            
+        </div>
+        
+          <!--<table style="width:100%">
+            <tr>
+                <td style="vertical-align: top;padding-right: 20px;">
+                    <img src="assets/play.png"  id="playmusic" onclick="playAudio()" style="height:100px;" />
+                    <span style="display: block;color: #f0394d;font-weight: 800;margin-top: 10px;">PLAY</span>
+                </td>
+
+                <td style="vertical-align: top;">
+                    <img src="assets/stop.PNG" id="stopmusic" data-dismiss="modal" style="height:100px;" />
+                    <span style="display: block;color: #f0394d;font-weight: 800;margin-top: 10px;">STOP</span>
+                </td>
+            </tr>
+          </table>-->
+
+      </div>
+      <!--<div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+      </div>-->
+    </div>
+
+  </div>
+</div>
+
+
+    <!--end of Modal -->
+    <input name="FlgModalShow" type="hidden" id="FlgModalShow" value="False" />
+    <div class="header">
+        <div class="outerheader">
+            <div class="innerheader">
+                <div class="logo">
+                    <a href="home.html">
+                        <img src="images/logo.png" alt="R B GOLD" />
+                    </a>
+                </div>
+                <div class="header_right">
+                    <a href="https://play.google.com/store/apps/details?id=com.rahulbullion.zrahulbullionandroidapp">
+                        <img src="images/button_download.png" alt="Download App" />
+                    </a>
+					<a href="https://apps.apple.com/us/app/rb-gold-spot/id1591934324">
+                        <img src="images/button_download2.png" alt="Download App" />
+                    </a>
+                </div>
+				
+            </div>
+        </div>
+    </div>
+    <div class="topmenu">
+        <div class="outertopmenu">
+            <div class="innertopmenu">
+                <div id='cssmenu'>
+                    <ul>
+                        <li><a href="home.html" data-ajax='false'>Home</a></li><li><a href="about-us.html" data-ajax='false'>About Us</a></li>
+						<li class="dropdown">
+                            <a class="activelinks" data-ajax='false'>Live Rates</a>
+						<ul class="dropdown-menu">
+														<li><a class="activelinks" data-ajax="false" href="index.html">Live Rates</a></li>
+															<li><a data-ajax="false" href="Trades.html">Trades</a></li>
+															<li><a data-ajax="false" href="Orders.html">Pending Orders</a></li>
+															<li><a data-ajax="false" href="Login.html">Login</a></li>
+														</ul></li>
+							
+							<li><a href="News.html" data-ajax='false'>News</a></li><li><a href="KYC.aspx" data-ajax='false'>
+                                KYC Form</a></li><li><a href="faq.html" data-ajax='false'>FAQ</a></li><li><a href="contact-us.html" data-ajax='false'> Contact Us</a></li>
+									<li><a href="Login.html" data-ajax='false'> Login</a></li>
+					</ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="titlebg">
+        <div class="outertitlebg">
+            <div class="innertitlebg">
+                <h2>
+                    Live Rates</h2>
+            </div>
+        </div>
+    </div>
+	
+
+<script src="ScriptResource0347.js?d=ntOlYKa1XBkZlMLq4uHESemAUsi7j72_0h84gw7mJO4hOYh0AzVzPijlq6sAg3FJRNGZKszMVoCeQZRMK17XCuDwLVWNnkUZuhSPakGnDaGdthKcH_zr-VWzYa4oo4nSHZnPJj3Lhi3RamFHYB4O8s_nFGwO_N-rOHgcaNBS-mOOk9f6stBg-JwPmRQMOsCp0&amp;t=c328a10" type="text/javascript"></script>
+<script src="ScriptResource15eb.js?d=rs58Evzp2Au2cWq2dW5wO0stuoDk7omO6zhxymDrygGUD2COXWrUSk5By_Mm5EnmUhJ9_xY0oazpiFBFgDXhtdFMtkd_wE5zrQv_85J40HQqQmhS30T3rPY7vKkqk0KjBeUu9G_aqP4-YZLrzm013ENbI_vLcpLsfZgO96U5e13SPTCNB4SyaIZBNimPZhh_0&amp;t=c328a10" type="text/javascript"></script>
+<div class="aspNetHidden">
+
+	<input type="hidden" name="__VIEWSTATEGENERATOR" id="__VIEWSTATEGENERATOR" value="90059987" />
+	<input type="hidden" name="__EVENTVALIDATION" id="__EVENTVALIDATION" value="/wEdAAglh+hqkizvH4uW6AUPOJvM8KbOzZVIvwuURH793O9uqsOYrKVCLnpub9yqgxO1Cyxf8/xiC0VGeazLADGGOAhRrG8FGOp9LsuS365D2r/IUfDHK2ZzC3l1zhqjnIDYyGQLx7djNcViZ2q1dj/OK1PlW7Q3lYeIgGqHTz67aHeTiDUp2RO3VodtWyxN37ieCsncfYDIQk2LViVhXoXBwl2t" />
+</div>
+    <div class="outerdiv">
+        <div class="innerdiv">
+            <div class="content_panel">
+
+            <div class="col-md-2 col-xs-12 hide-Mobile"> <!--offset-md-3 -->   
+                            <div id="myCarousel" class="carousel slide" data-ride="carousel" style="width: 100%;
+                                                                                                    float: left;
+                                                                                                    padding: 5px;
+                                                                                                    box-shadow: 1px 1px 5px 0px #000;
+                                                                                                    border-radius: 10px;">
+                                <!-- Wrapper for slides -->
+                                <div class="carousel-inner">
+                                    <div class="item active">
+                                        <img src="img/L-Slide2.jpg" alt="slide" style="width: 100%;height: 500px;border-radius: 5px;">
+                                    </div>                                    
+                                </div>
+                            </div>
+                         </div>
+
+                         <div class="col-md-7 col-xs-12">
+                <div class="left_panel">
+                    <script type="text/javascript">
+//<![CDATA[
+Sys.WebForms.PageRequestManager._initialize('ScriptManager1', 'form1', ['tUpdatePanel1','UpdatePanel1'], ['TimerProducts','TimerProducts'], [], 90, '');
+//]]>
+</script>
+
+                    <script type="text/javascript">
+                        var prm = Sys.WebForms.PageRequestManager.getInstance();
+                        prm.add_beginRequest(beginRequest);
+                        function beginRequest() {
+                            prm._scrollPosition = null;
+                        }
+                    </script>
+					<script src="js/LiveRates6.js" type="text/javascript"></script>
+		<script src="js/TemplateID.Chirayu.js" type="text/javascript"></script>
+		<script src="js/jquery.marquee.min.js" type="text/javascript"></script>
+    <script src="js/LiveRateMessage.Chirayu.js" type="text/javascript"></script>
+	<script src="js/Marquee.Chirayu.js" type="text/javascript"></script>
+
+     <script src="js/popup.onload.mnk.js" type="text/javascript"></script>
+
+		<script type="text/javascript">
+        $(document).ready(function () {
+
+            localStorage.appnameWithMiniadminId = "rbgold";
+            localStorage.defaultScripTemplateId = "rbgold";
+            localStorage.coinsScripTemplateId = "coinsrbgold";
+            localStorage.ipAddressOrder = "mobileadminapi.rbgoldspot.com";
+            localStorage.ipAddressBCast = "bcast.rbgoldspot.com";
+            localStorage.step2Port = "8889";
+            localStorage.step3StreamingPort = "7768";
+            localStorage.webPanel = "adminapi.rbgoldspot.com";
+            localStorage.MobileType = "Android";
+            localStorage.topicForMessage = localStorage.appnameWithMiniadminId + localStorage.MobileType + "All";
+
+
+
+
+            localStorage.step3HTTPPort = "8878";
+            localStorage.chartIpAddress = "bulliontradingchart.chirayusoft.com";
+            localStorage.chartPort = "2388";
+            //localStorage.topicForMessage = localStorage.appnameWithMiniadminId + localStorage.MobileType + "All";
+
+            localStorage.ticker1 = "https://ticker.chirayusoft.com/bullion/";
+		localStorage.tickerr1 = "/v1/https.txt";
+
+        });
+
+
+
+    </script>
+	<table id="gvData" style="width:100%;text-align:center;line-height: 1.85;">                       
+                                </table>
+                    <span id="TimerProducts" style="visibility:hidden;display:none;"></span>
+                    <div id="UpdatePanel1">
+					
+	
+          <!--                   <div id="PanelLiverates">
+		
+                                <div class="product_box">
+                                    <div class="heading">
+                                        <div class="heading_left">
+                                            Products</div>
+                                        <div class="heading_mid">
+                                            Sell Price</div>
+                                        <div class="heading_right">
+                                            In Stock</div>
+                                    </div>
+                                    
+                                            <div class="row_mid">
+                                                <div class="left">
+                                                    <span id="lvLiveRates_ltProductName_0"><font size='5'>Gold 999</font><font size='3'></font></span>
+                                                </div>
+                                                <div class="mid">
+                                                    <div class="sell-price-container">
+                                                        
+                                                        <div class="sell-price">
+                                                            <span id="lvLiveRates_ltSell_0" style="color:#216A00;"><i class='fa fa-inr'></i> 32798</span></div>
+                                                    </div>
+                                                </div>
+                                                <div class="right">
+                                                    <div class="pic">
+                                                        <img id="lvLiveRates_imgstock_0" src="images/stock_pic.png" alt="Available" />
+                                                        <input type="hidden" name="lvLiveRates$ctrl0$hidstock" id="lvLiveRates_hidstock_0" value="True" />
+                                                        <input type="hidden" name="lvLiveRates$ctrl0$hidstatus" id="lvLiveRates_hidstatus_0" value="up" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                        
+                                            <div class="row_mid">
+                                                <div class="left">
+                                                    <span id="lvLiveRates_ltProductName_1"><font size='5'>Silver 999</font><font size='3'> - (30 kgs)</font></span>
+                                                </div>
+                                                <div class="mid">
+                                                    <div class="sell-price-container">
+                                                        
+                                                        <div class="sell-price">
+                                                            <span id="lvLiveRates_ltSell_1" style="color:#FF2120;"><i class='fa fa-inr'></i> 39728</span></div>
+                                                    </div>
+                                                </div>
+                                                <div class="right">
+                                                    <div class="pic">
+                                                        <img id="lvLiveRates_imgstock_1" src="images/stock_pic.png" alt="Available" />
+                                                        <input type="hidden" name="lvLiveRates$ctrl1$hidstock" id="lvLiveRates_hidstock_1" value="True" />
+                                                        <input type="hidden" name="lvLiveRates$ctrl1$hidstatus" id="lvLiveRates_hidstatus_1" value="down" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                        
+                                            <div class="row_mid">
+                                                <div class="left">
+                                                    <span id="lvLiveRates_ltProductName_2"><font size='5'>Silver 999</font><font size='3'> - (5 kgs)</font></span>
+                                                </div>
+                                                <div class="mid">
+                                                    <div class="sell-price-container">
+                                                        
+                                                        <div class="sell-price">
+                                                            <span id="lvLiveRates_ltSell_2" style="color:#FF2120;"><i class='fa fa-inr'></i> 39753</span></div>
+                                                    </div>
+                                                </div>
+                                                <div class="right">
+                                                    <div class="pic">
+                                                        <img id="lvLiveRates_imgstock_2" src="images/stock_pic.png" alt="Available" />
+                                                        <input type="hidden" name="lvLiveRates$ctrl2$hidstock" id="lvLiveRates_hidstock_2" value="True" />
+                                                        <input type="hidden" name="lvLiveRates$ctrl2$hidstatus" id="lvLiveRates_hidstatus_2" value="down" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                        
+                                </div>
+                            
+	</div>
+                            
+
+                            <div id="pnlComexRates">
+		
+                                <div class="comex_box">
+                                    <div class="box margin_right">
+                                        <div class="box_inner">
+                                            <div class="gold">
+                                                Spot Gold</div>
+                                            <div class="price">
+                                                <span id="lblbidGOLD" style="color:#FF2120;"><i class='fa fa-usd'></i> 1230.85</span>
+                                                /
+                                                <span id="lblaskGOLD" style="color:#FF2120;"><i class='fa fa-usd'></i> 1230.99</span></div>
+                                        </div>
+                                    </div>
+                                    <div class="box">
+                                        <div class="box_inner">
+                                            <div class="silver">
+                                                Spot Silver</div>
+                                            <div class="price">
+                                                <span id="lblbidSILVER" style="color:#216A00;"><i class='fa fa-usd'></i> 14.767</span>
+                                                /
+                                                <span id="lblaskSILVER" style="color:#216A00;"><i class='fa fa-usd'></i> 14.773</span></div>
+                                        </div>
+                                    </div>
+                                    <div class="box box_right">
+                                        <div class="box_inner">
+                                            <div class="inr">
+                                                USD INR</div>
+                                            <div class="price">
+                                                <span id="lblbidINR" style="color:#216A00;"><i class='fa fa-inr'></i> 73.2000</span>
+                                                /
+                                                <span id="lblaskINR" style="color:#216A00;"><i class='fa fa-inr'></i> 73.2100</span></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            
+	</div> -->
+
+                        
+</div>
+                    <div style="margin-top: 0px; margin-left: 3px; font-family: Arial; font-size: 18px;
+                        color: black">
+                        Gold Rate is per 10 Gms. & Silver Rate is per 1 Kg.
+                    </div>
+                  
+                </div>
+               </div>
+               
+                <div class="col-md-2 col-xs-12 hide-Mobile"> <!--offset-md-3 -->   
+                            <div id="Div1" class="carousel slide" data-ride="carousel" style="width: 100%;
+                                                                                                    float: left;
+                                                                                                    padding: 5px;
+                                                                                                    box-shadow: 1px 1px 5px 0px #000;
+                                                                                                    border-radius: 10px;">
+                                <!-- Wrapper for slides -->
+                                <div class="carousel-inner">
+                                    <div class="item active">
+                                        <img src="img/1.jpg" alt="slide" style="width: 100%;height: 500px;border-radius: 5px;">
+                                    </div>
+                                    
+                                </div>
+                            </div>
+                         </div>
+               
+               <!--  <div class="right_panel">
+                    <div class="top">
+                        <img src="images/news_bg_top.png" alt="news" /></div>
+                    <div class="mid">
+                        <h1 style="font-size: 20px; color: #ffffff; font-family: 'Roboto-Bold';">
+                            News</h1>
+                        <div class="microsoft container">
+                            <p class="marquee">
+                                <span id="news1">For Booking Contact: 0866-2574961,    0866-2570961, 8885462961</span><br />
+                                <br />
+                                <span id="news2">Gold Prices Power To 10-Week High, More Upside Likely</span><br />
+                                <br />
+                                <span id="news3">The fact that gold closed above its 100-day moving average signals the real possibility that, on an intermediate basis, gold is in a bullish trend.</span></p>
+                        </div>
+                    </div>
+                    <div class="bottom">
+                        <img src="images/news_bg_bottom.png" alt="news" /></div>
+                </div> -->
+            </div>
+        </div>
+    </div>
+    
+
+
+<!-- </form> -->
+    <div class="news_scroll">
+        <div class="outernews_scroll">
+            <div class="innernews_scroll">
+                <div class="marquee" id="marqueeData">
+                </div><!--<marquee></marquee>-->
+
+                 <style>
+                .marquee
+                {
+                    width: 100%;
+                    overflow: hidden;
+                    border: 0px solid #ccc;
+                    color: #000; /*background: #000;*/
+                        padding: 8px 0;
+                }
+            </style>
+
+            </div>
+        </div>
+    </div>
+	 <div class="news_scroll">
+        <div class="outernews_scroll">
+            <div class="innernews_scroll">
+                 <div style="width:100%;" id="gvDataLiveRateMessage" class="text-center"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="bottombg">
+        <div class="outerbottombg">
+            <div class="innerbottombg">
+                <img src="images/icon_booking.png" alt="Booking" />
+                <h1>
+                    BOOKING</h1>
+                <div class="box box_margin">
+                    <div class="pic">
+                        <img src="images/pic_for_booking.png" alt="Booking" /></div>
+                    <div class="text">
+                        Mon to Fri - 9:15 AM to 11:00 PM<br />
+                        Sat - 10:30 AM to 02:00 PM <br /> Sun - Closed 
+                    </div>
+                    <div class="aerotop">
+                        <img src="images/aero_top.png" alt="Booking" /></div>
+                    <div class="name">
+                        For Booking</div>
+                </div>
+                <div class="box">
+                    <div class="pic">
+                        <img src="images/pic_account_detail.png" alt="Account Details" /></div>
+                    <div class="text">
+                        Vijaywada Axis bank<br />
+                        A/C No. 916020046120427<br />
+                        Ifsc Code UTIB0000069
+                    </div>
+                    <div class="aerotop">
+                        <img src="images/aero_top.png" alt="Account Details" /></div>
+                    <div class="name">
+                        account details
+                    </div>
+                </div>
+                <div class="box box_last">
+                    <div class="pic">
+                        <img src="images/pic_telephone.png" alt="Contact Details" /></div>
+                    <div class="text">
+                        +91 866-257-0961, +91 866-257-4961 +91 888-546-2961</div>
+                    <div class="aerotop">
+                        <img src="images/aero_top.png" alt="Contact Details" /></div>
+                    <div class="name">
+                        TELEPHONE</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="footer">
+        <div class="outerfooter">
+            <div class="innerfooter">
+                <div class="left">
+                   <ul>
+                         <li><a href="home.html" data-ajax='false'>Home</a></li>
+						 <li><a href="about-us.html" data-ajax='false'>About Us</a></li>
+						 <li><a data-ajax="false" href="index.html">Live Rates</a></li>
+						 <li><a data-ajax="false" href="Trades.html">Trades</a></li>
+						 <li><a data-ajax="false" href="Orders.html">Pending Orders</a></li>
+						 <li><a href="News.html" data-ajax='false'>News</a></li><li>
+						 <a href="KYC.aspx" data-ajax='false'>KYC Form</a></li>
+						 <li><a href="faq.html" data-ajax='false'>FAQ</a></li>
+						 
+						 <li><a data-ajax="false" href="Login.html">Login</a></li>
+                    </ul>   
+                </div>
+				
+				<div class="left">
+                   © 2016 R B Gold. All rights reserved
+                </div>
+                <div class="copyright">
+                      Powered by : <a style="color:#FFF;text-decoration: underline;" href="http://www.chirayusoft.com/">Chirayu Software Solutions</a>
+					</div>
+            </div>
+        </div>
+    </div>
+    <div class="disclaimer">
+        <div class="outerdisclaimer">
+            <div class="innerdisclaimer">
+                <strong>Disclaimer</strong><br />
+                All information provided "as is basis" for information purpose only, not intended
+                for trading purpose or advise. Neither R B Gold, nor the data provider is liable
+                for any information errors, incompleteness or delay or for any action on the information
+                contained herein. By accessing the www.rbgoldspot.com website, you agree not to distribute
+                the information found therein.
+            </div>
+        </div>
+    </div>
+	
+</body>
+
+
+<script src="vendor/jquery/jquery.min.js"></script>
+    <script src="vendor/jquery.appear/jquery.appear.min.js"></script>
+    <script src="vendor/jquery.easing/jquery.easing.min.js"></script>
+    <script src="vendor/jquery-cookie/jquery-cookie.min.js"></script>
+    <script src="vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="vendor/common/common.min.js"></script>
+
+
+</html>
