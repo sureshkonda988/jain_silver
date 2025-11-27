@@ -88,5 +88,11 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-module.exports = mongoose.model('User', userSchema);
+// Create User model - MongoDB collection will be 'users' (Mongoose auto-pluralizes)
+const User = mongoose.model('User', userSchema);
+
+// Ensure collection name is 'users'
+User.collection.name = 'users';
+
+module.exports = User;
 

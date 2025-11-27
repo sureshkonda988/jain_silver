@@ -395,7 +395,7 @@ router.post('/register',
       }
 
       // Create user
-      console.log('👤 Creating user in MongoDB...');
+      console.log('👤 Creating user in MongoDB (collection: users)...');
       const user = new User({
         name: name.trim(),
         email: normalizedEmail,
@@ -406,12 +406,22 @@ router.post('/register',
           code: otp,
           expiresAt: otpExpiresAt
         },
-        status: 'pending'
+        status: 'pending',
+        role: 'user', // Explicitly set role to 'user'
+        isVerified: false // Will be set to true after OTP verification
       });
 
       try {
         await user.save();
-        console.log('✅ User saved to MongoDB:', user._id);
+        console.log('✅ User saved to MongoDB collection "users":', user._id);
+        console.log('   Collection name:', User.collection.name);
+        console.log('   User details:', {
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          status: user.status,
+          role: user.role
+        });
       } catch (saveError) {
         console.error('❌ Error saving user to MongoDB:', saveError);
         throw saveError;
