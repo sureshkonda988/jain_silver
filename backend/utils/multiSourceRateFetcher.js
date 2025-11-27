@@ -8,8 +8,11 @@ const { RATE_SOURCES, ACTIVE_RATE_SOURCE } = require('../config/rateSource');
  */
 
 // Fetch from RB Goldspot (tab-separated format)
+// Format: ID	Name	Bid	Ask	High	Low	Status
+// Example: 2966	Silver 999 	-	166685	168779	165330	InStock
 const fetchFromRBGoldspot = async () => {
   try {
+    console.log('📡 Fetching live rates from RB Goldspot...');
     const response = await axios.get('https://bcast.rbgoldspot.com:7768/VOTSBroadcastStreaming/Services/xml/GetLiveRateByTemplateID/rbgold', {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -20,6 +23,9 @@ const fetchFromRBGoldspot = async () => {
       maxRedirects: 5,
       responseType: 'text'
     });
+
+    console.log('✅ Received response from RB Goldspot');
+    console.log('Response preview:', response.data?.substring(0, 300) || 'No data');
 
     // Parse tab-separated format
     const lines = response.data.split('\n');
@@ -34,31 +40,49 @@ const fetchFromRBGoldspot = async () => {
       // Split by tabs or multiple spaces
       const parts = trimmedLine.split(/\s{2,}|\t/).filter(p => p.trim());
       
-      if (parts.length >= 6) {
+      if (parts.length >= 4) {
         const id = parts[0].trim();
         const name = parts[1].trim();
-        const bid = parts[2].trim();
-        const ask = parts[3].trim();
+        // Format: ID	Name	Bid	Ask	High	Low	Status
+        // For Silver 999, columns are: 2966	Silver 999 	-	166685	168779	165330	InStock
+        // So: parts[0]=ID, parts[1]=Name, parts[2]=Bid, parts[3]=Ask (per kg)
+        const bid = parts.length > 2 ? parts[2].trim() : '';
+        const ask = parts.length > 3 ? parts[3].trim() : '';
 
         // Look for Silver 999 (ID: 2966 or name contains "Silver 999")
         if ((id === '2966' || name.toLowerCase().includes('silver 999')) && 
             !name.toLowerCase().includes('mini')) {
           silver999Data = { id, name, bid, ask };
+          console.log(`✅ Found Silver 999: ID=${id}, Name=${name}, Bid=${bid}, Ask=${ask}`);
           
-          // Use "ask" price (4th column, per kg)
-          if (ask && ask !== '-' && ask !== '') {
+          // Use "ask" price (4th column, per kg) - this is the selling price
+          if (ask && ask !== '-' && ask !== '' && ask !== '0') {
             ratePerKg = parseFloat(ask);
             if (!isNaN(ratePerKg) && ratePerKg > 0) {
               ratePerGram = ratePerKg / 1000;
+              console.log(`✅ Using Ask price: ₹${ratePerKg}/kg = ₹${ratePerGram}/gram`);
               break;
             }
           }
-          // If ask not available, try bid
-          if (!ratePerGram && bid && bid !== '-' && bid !== '') {
+          // If ask not available, try bid (3rd column)
+          if (!ratePerGram && bid && bid !== '-' && bid !== '' && bid !== '0') {
             ratePerKg = parseFloat(bid);
             if (!isNaN(ratePerKg) && ratePerKg > 0) {
               ratePerGram = ratePerKg / 1000;
+              console.log(`✅ Using Bid price: ₹${ratePerKg}/kg = ₹${ratePerGram}/gram`);
               break;
+            }
+          }
+          // Try High price (5th column) if available
+          if (!ratePerGram && parts.length > 4) {
+            const high = parts[4].trim();
+            if (high && high !== '-' && high !== '' && high !== '0') {
+              ratePerKg = parseFloat(high);
+              if (!isNaN(ratePerKg) && ratePerKg > 0) {
+                ratePerGram = ratePerKg / 1000;
+                console.log(`✅ Using High price: ₹${ratePerKg}/kg = ₹${ratePerGram}/gram`);
+                break;
+              }
             }
           }
         }
@@ -84,7 +108,7 @@ const fetchFromRBGoldspot = async () => {
     }
 
     if (ratePerGram && ratePerGram > 0 && !isNaN(ratePerGram)) {
-      return {
+      const result = {
         ratePerKg: Math.round(ratePerKg),
         ratePerGram: Math.round(ratePerGram * 100) / 100,
         source: 'bcast.rbgoldspot.com',
@@ -92,9 +116,23 @@ const fetchFromRBGoldspot = async () => {
         rawData: silver999Data,
         usdInrRate: usdInrRate || 89.25 // Default if not found
       };
+      console.log(`✅ Successfully extracted rate from RB Goldspot: ₹${result.ratePerGram}/gram (₹${result.ratePerKg}/kg)`);
+      return result;
     }
+    
+    console.warn('⚠️ Could not extract valid rate from RB Goldspot response');
+    console.warn('  Parsed lines:', lines.length);
+    console.warn('  Silver 999 data:', silver999Data);
     return null;
   } catch (error) {
+    console.error('❌ Error fetching from RB Goldspot:', error.message);
+    if (error.response) {
+      console.error('  Response status:', error.response.status);
+      console.error('  Response data:', error.response.data?.substring(0, 500));
+    }
+    if (error.code) {
+      console.error('  Error code:', error.code);
+    }
     return null;
   }
 };
@@ -407,29 +445,35 @@ const fetchSilverRatesFromMultipleSources = async () => {
     return null;
   }
 
-  // Try sources in parallel for faster response
-  const promises = enabledSources.map(source => {
-    if (source.name === 'RB Goldspot') {
-      return fetchFromRBGoldspot();
-    } else if (source.name === 'Vercel') {
-      return fetchFromVercel();
-    } else if (source.name === 'Custom' && source.url) {
-      return fetchFromCustom(source.url);
-    }
-    return Promise.resolve(null);
-  });
+  console.log(`🔄 Trying ${enabledSources.length} rate sources in priority order...`);
+  console.log('  Sources:', enabledSources.map(s => `${s.name} (priority ${s.priority})`).join(', '));
 
-  const results = await Promise.allSettled(promises);
-
-  // Return first successful result
-  for (const result of results) {
-    if (result.status === 'fulfilled' && result.value) {
-      return result.value;
+  // Try sources sequentially in priority order (faster than parallel for first success)
+  for (const source of enabledSources) {
+    try {
+      let result = null;
+      if (source.name === 'RB Goldspot') {
+        result = await fetchFromRBGoldspot();
+      } else if (source.name === 'Vercel') {
+        result = await fetchFromVercel();
+      } else if (source.name === 'Custom' && source.url) {
+        result = await fetchFromCustom(source.url);
+      }
+      
+      if (result && result.ratePerGram && result.ratePerGram > 0) {
+        console.log(`✅ Successfully fetched rate from ${source.name}: ₹${result.ratePerGram}/gram`);
+        return result;
+      } else {
+        console.log(`⚠️ ${source.name} returned no valid rate, trying next source...`);
+      }
+    } catch (error) {
+      console.error(`❌ Error fetching from ${source.name}:`, error.message);
+      console.log(`   Trying next source...`);
     }
   }
 
   // All sources failed
-  console.warn('⚠️ All rate sources failed to fetch rates');
+  console.warn('❌ All rate sources failed to fetch rates');
   return null;
 };
 

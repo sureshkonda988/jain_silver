@@ -35,8 +35,8 @@ const RATE_SOURCES = {
 // Options: 'RB_GOLDSPOT', 'VERCEL', 'CUSTOM', or 'MULTI'
 // 'MULTI' will try all enabled sources in priority order (recommended for reliability)
 // Set via RATE_SOURCE environment variable or change default below
-// Default to VERCEL for live rates from jainsilverpp1.vercel.app
-const ACTIVE_RATE_SOURCE = process.env.RATE_SOURCE || 'VERCEL';
+// Default to MULTI to use both Vercel stream and RB Goldspot for maximum reliability
+const ACTIVE_RATE_SOURCE = process.env.RATE_SOURCE || 'MULTI';
 
 // If MULTI, it will try all enabled sources in priority order
 // If a specific source name, it will only use that source
