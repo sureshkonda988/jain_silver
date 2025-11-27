@@ -1,0 +1,44 @@
+# Base Image for Jain Silver Backend
+# This image contains Node.js and common dependencies
+# Can be used as a base for development and production images
+
+FROM node:18-alpine AS base
+
+# Install system dependencies
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    curl \
+    && rm -rf /var/cache/apk/*
+
+# Set working directory
+WORKDIR /app
+
+# Create app user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including dev dependencies for base image)
+RUN npm ci && \
+    npm cache clean --force
+
+# Change ownership to nodejs user
+RUN chown -R nodejs:nodejs /app
+
+# Switch to non-root user
+USER nodejs
+
+# Expose port
+EXPOSE 5000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:5000/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+
+# Default command
+CMD ["node", "server.js"]
+
