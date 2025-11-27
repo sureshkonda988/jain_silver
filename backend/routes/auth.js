@@ -10,6 +10,7 @@ const fs = require('fs');
 
 // Root route - get auth statistics from MongoDB
 router.get('/', async (req, res) => {
+  console.log('📡 GET /api/auth - Auth stats request');
   try {
     const mongoose = require('mongoose');
     
@@ -113,7 +114,17 @@ const generateToken = (userId) => {
 };
 
 // Register new user
-router.post('/register', 
+router.post('/register',
+  (req, res, next) => {
+    console.log('📝 POST /api/auth/register - Registration request received');
+    console.log('Request method:', req.method);
+    console.log('Request path:', req.path);
+    console.log('Request headers:', {
+      'content-type': req.headers['content-type'],
+      'content-length': req.headers['content-length']
+    });
+    next();
+  }, 
   (req, res, next) => {
     // Handle multer errors
     upload.fields([
