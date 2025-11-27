@@ -451,28 +451,69 @@ router.post('/admin/signin',
   ],
   async (req, res) => {
     try {
+      console.log('🔐 Admin login attempt:', { email: req.body.email });
+      
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        console.error('❌ Validation errors:', errors.array());
         return res.status(400).json({ errors: errors.array() });
       }
 
       const { email, password } = req.body;
+      const normalizedEmail = email.toLowerCase().trim();
 
+      // Check MongoDB connection
+      const mongoose = require('mongoose');
+      if (mongoose.connection.readyState !== 1) {
+        console.log('⚠️ MongoDB not connected, attempting connection...');
+        try {
+          await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/jain_silver', {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+            serverSelectionTimeoutMS: 5000,
+          });
+          console.log('✅ MongoDB connected for admin login');
+        } catch (connError) {
+          console.error('❌ MongoDB connection failed:', connError.message);
+          return res.status(503).json({ 
+            message: 'Database connection failed', 
+            error: 'Please try again later' 
+          });
+        }
+      }
+
+      // Find admin user
+      console.log('🔍 Searching for admin user with email:', normalizedEmail);
       const user = await User.findOne({ 
-        email: email.toLowerCase(),
+        email: normalizedEmail,
         role: 'admin'
       });
 
       if (!user) {
+        console.error('❌ Admin user not found:', normalizedEmail);
+        // Check if any admin exists
+        const adminCount = await User.countDocuments({ role: 'admin' });
+        console.log(`📊 Total admin users in database: ${adminCount}`);
+        if (adminCount === 0) {
+          console.log('⚠️ No admin users found. Admin will be created on next server restart.');
+        }
         return res.status(401).json({ message: 'Invalid admin credentials' });
       }
 
+      console.log('✅ Admin user found:', { id: user._id, email: user.email, name: user.name });
+
+      // Verify password
       const isPasswordValid = await user.comparePassword(password);
       if (!isPasswordValid) {
+        console.error('❌ Invalid password for admin:', normalizedEmail);
         return res.status(401).json({ message: 'Invalid admin credentials' });
       }
 
+      console.log('✅ Password verified successfully');
+
+      // Generate token
       const token = generateToken(user._id);
+      console.log('✅ Admin login successful:', { email: user.email, id: user._id });
 
       res.json({
         message: 'Admin sign in successful',
@@ -485,8 +526,13 @@ router.post('/admin/signin',
         }
       });
     } catch (error) {
-      console.error('Admin sign in error:', error);
-      res.status(500).json({ message: 'Server error', error: error.message });
+      console.error('❌ Admin sign in error:', error);
+      console.error('Error stack:', error.stack);
+      res.status(500).json({ 
+        message: 'Server error', 
+        error: error.message,
+        ...(process.env.NODE_ENV === 'development' ? { stack: error.stack } : {})
+      });
     }
   }
 );
