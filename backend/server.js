@@ -5,19 +5,33 @@ const http = require('http');
 const socketIo = require('socket.io');
 require('dotenv').config();
 
-// Platform detection - with error handling
+// Platform detection - with comprehensive error handling
 let platform, database, serverConfig;
-try {
-  const platformConfig = require('./config/platform');
-  platform = platformConfig.platform;
-  database = platformConfig.database;
-  serverConfig = platformConfig.server;
-  console.log(`🚀 Running on platform: ${platform.name.toUpperCase()}`);
-  console.log(`📦 Platform details:`, platformConfig.getConfig());
-} catch (error) {
-  console.error('Error loading platform config:', error);
-  // Fallback configuration
-  const isVercel = process.env.VERCEL === 'true' || process.env.VERCEL_ENV;
+
+// Safe platform config loading
+function loadPlatformConfig() {
+  try {
+    const platformConfig = require('./config/platform');
+    if (platformConfig && platformConfig.platform) {
+      platform = platformConfig.platform;
+      database = platformConfig.database;
+      serverConfig = platformConfig.server;
+      console.log(`🚀 Running on platform: ${platform.name.toUpperCase()}`);
+      if (platformConfig.getConfig) {
+        console.log(`📦 Platform details:`, platformConfig.getConfig());
+      }
+      return true;
+    }
+  } catch (error) {
+    console.error('Error loading platform config:', error.message);
+  }
+  return false;
+}
+
+// Try to load platform config, use fallback if it fails
+if (!loadPlatformConfig()) {
+  console.log('⚠️  Using fallback platform configuration');
+  const isVercel = process.env.VERCEL === 'true' || process.env.VERCEL_ENV || process.env.VERCEL;
   platform = {
     isVercel: !!isVercel,
     isAWS: false,
@@ -38,7 +52,7 @@ try {
     enableRateUpdater: !isVercel,
     healthCheckPath: '/health'
   };
-  console.log(`⚠️  Using fallback platform config: ${platform.name}`);
+  console.log(`📦 Platform: ${platform.name}`);
 }
 
 const app = express();
@@ -86,16 +100,18 @@ const connectDB = async () => {
     }
 
     // Connect with platform-optimized settings
-    const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/jain_silver', {
+    const dbConfig = {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      serverSelectionTimeoutMS: database.serverSelectionTimeoutMS,
-      socketTimeoutMS: database.socketTimeoutMS,
-      maxPoolSize: database.maxPoolSize,
-      minPoolSize: database.minPoolSize,
-      retryWrites: database.retryWrites,
-      retryReads: database.retryReads,
-    });
+      serverSelectionTimeoutMS: (database && database.serverSelectionTimeoutMS) || 5000,
+      socketTimeoutMS: (database && database.socketTimeoutMS) || 45000,
+      maxPoolSize: (database && database.maxPoolSize) || 10,
+      minPoolSize: (database && database.minPoolSize) || 1,
+      retryWrites: (database && database.retryWrites) !== undefined ? database.retryWrites : true,
+      retryReads: (database && database.retryReads) !== undefined ? database.retryReads : true,
+    };
+    
+    const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/jain_silver', dbConfig);
     console.log('MongoDB Connected');
     return conn;
   } catch (err) {
@@ -152,7 +168,7 @@ app.use('/api/rates', require('./routes/rates'));
 app.use('/api/store', require('./routes/store'));
 
 // Socket.io for real-time updates (only if enabled for platform)
-if (serverConfig.enableSocketIO) {
+if (serverConfig && serverConfig.enableSocketIO) {
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
     
@@ -169,19 +185,21 @@ if (serverConfig.enableSocketIO) {
 }
 
 // Platform-specific initialization
-if (platform.isVercel) {
-  console.log('🚀 Running on Vercel (serverless mode)');
-  console.log('⚠️  Socket.io WebSocket connections are not supported on Vercel');
-  console.log('📡 Real-time updates will use HTTP polling fallback');
-} else if (platform.isAWS) {
-  console.log('☁️  Running on AWS');
-  console.log('✅ Full features enabled (Socket.io, rate updater)');
-} else if (platform.isDocker) {
-  console.log('🐳 Running in Docker container');
-  console.log('✅ Full features enabled');
-} else {
-  console.log('💻 Running locally');
-  console.log('✅ Full features enabled');
+if (platform) {
+  if (platform.isVercel) {
+    console.log('🚀 Running on Vercel (serverless mode)');
+    console.log('⚠️  Socket.io WebSocket connections are not supported on Vercel');
+    console.log('📡 Real-time updates will use HTTP polling fallback');
+  } else if (platform.isAWS) {
+    console.log('☁️  Running on AWS');
+    console.log('✅ Full features enabled (Socket.io, rate updater)');
+  } else if (platform.isDocker) {
+    console.log('🐳 Running in Docker container');
+    console.log('✅ Full features enabled');
+  } else {
+    console.log('💻 Running locally');
+    console.log('✅ Full features enabled');
+  }
 }
 
 // Export app for both Vercel and local development
@@ -282,7 +300,7 @@ mongoose.connection.once('open', async () => {
     }
     
     // Start rate updater (only if enabled for platform)
-    if (serverConfig.enableRateUpdater) {
+    if (serverConfig && serverConfig.enableRateUpdater) {
       console.log('🔄 Starting rate updater...');
       try {
         const { startRateUpdater } = require('./utils/rateUpdater');
