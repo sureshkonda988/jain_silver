@@ -113,7 +113,33 @@ const generateToken = (userId) => {
   });
 };
 
-// Register new user
+// Register new user - GET handler for better error message
+router.get('/register', (req, res) => {
+  res.status(405).json({ 
+    message: 'Method not allowed', 
+    error: 'Registration endpoint requires POST method, not GET',
+    correctMethod: 'POST',
+    endpoint: '/api/auth/register',
+    example: {
+      method: 'POST',
+      url: '/api/auth/register',
+      contentType: 'multipart/form-data',
+      body: {
+        name: 'string',
+        email: 'string',
+        phone: 'string',
+        password: 'string',
+        aadharNumber: 'string',
+        panNumber: 'string',
+        aadharFront: 'file',
+        aadharBack: 'file',
+        panImage: 'file'
+      }
+    }
+  });
+});
+
+// Register new user - POST handler
 router.post('/register',
   (req, res, next) => {
     console.log('📝 POST /api/auth/register - Registration request received');
