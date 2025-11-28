@@ -31,10 +31,12 @@ router.get('/', async (req, res) => {
       
       // Fetch with timeout - MUST get live data every second
       // Both RB Goldspot and Vercel sources are tried in parallel
+      // Use Promise.race with a timeout that's less than Vercel's function timeout
+      // Vercel free tier has 10s timeout, so use 9s to be safe
       liveRate = await Promise.race([
         fetchSilverRatesFromMultipleSources(),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout after 15 seconds')), 15000) // 15 seconds - enough time for both sources
+          setTimeout(() => reject(new Error('Timeout after 9 seconds')), 9000) // 9 seconds - safe for Vercel 10s limit
         )
       ]);
       
