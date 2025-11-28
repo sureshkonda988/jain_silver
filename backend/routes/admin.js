@@ -215,6 +215,7 @@ router.get('/user/:userId', auth, adminAuth, async (req, res) => {
 
 // Admin helper: adjust rates (per-gram amount, can be negative)
 // This applies a manual adjustment that is added/subtracted from live RB Goldspot rates
+// Uses in-memory storage (no MongoDB for rates)
 router.post('/adjust-rates', auth, adminAuth, async (req, res) => {
   try {
     const { amount } = req.body;
@@ -222,35 +223,35 @@ router.post('/adjust-rates', auth, adminAuth, async (req, res) => {
       return res.status(400).json({ message: 'Valid numeric amount is required' });
     }
 
-    const SilverRate = require('../models/SilverRate');
+    // Get the in-memory manual adjustments from rates.js
+    // We'll access it via a shared module or require the rates router
+    // For now, we'll use a simple approach: store in a shared location
+    const rateDefinitions = [
+      'Silver Coin 1 Gram',
+      'Silver Coin 5 Grams',
+      'Silver Coin 10 Grams',
+      'Silver Coin 50 Grams',
+      'Silver Coin 100 Grams',
+      'Silver Bar 100 Grams',
+      'Silver Bar 500 Grams',
+      'Silver Bar 1 Kg',
+      'Silver Jewelry 92.5%',
+      'Silver Jewelry 99.9%'
+    ];
 
-    // Get all rates and apply manual adjustment
-    // The manualAdjustment will be added to live rates from RB Goldspot in the rates endpoint
-    const rates = await SilverRate.find({});
+    // Access the manual adjustments from rates.js module
+    // We need to export it from rates.js and import it here
+    const ratesModule = require('./rates');
+    if (!ratesModule.manualAdjustments) {
+      ratesModule.manualAdjustments = {};
+    }
+
     let modified = 0;
-
-    for (const rate of rates) {
-      // Set manual adjustment (can be negative for decrease)
-      // This adjustment will be applied to live rates from RB Goldspot
-      rate.manualAdjustment = amount;
-      
-      // Get current base rate (before adjustment) to recalculate
-      // We need to remove previous adjustment first
-      const prevAdj = typeof rate.manualAdjustment === 'number' ? rate.manualAdjustment : 0;
-      const baseRatePerGram = rate.ratePerGram - (prevAdj || 0);
-      
-      // Apply new adjustment
-      const newRatePerGram = Math.max(0, Math.round((baseRatePerGram + amount) * 100) / 100);
-      rate.ratePerGram = newRatePerGram;
-
-      // Recalculate total based on weight
-      let weightInGrams = rate.weight && rate.weight.value ? rate.weight.value : 1;
-      if (rate.weight && rate.weight.unit === 'kg') weightInGrams = rate.weight.value * 1000;
-      else if (rate.weight && rate.weight.unit === 'oz') weightInGrams = rate.weight.value * 28.35;
-
-      rate.rate = Math.round(rate.ratePerGram * weightInGrams * 100) / 100;
-      rate.lastUpdated = new Date();
-      await rate.save();
+    for (const rateName of rateDefinitions) {
+      if (!ratesModule.manualAdjustments[rateName]) {
+        ratesModule.manualAdjustments[rateName] = {};
+      }
+      ratesModule.manualAdjustments[rateName].manualAdjustment = amount;
       modified++;
     }
 
@@ -264,7 +265,7 @@ router.post('/adjust-rates', auth, adminAuth, async (req, res) => {
       message: `Rates ${amount > 0 ? 'increased' : 'decreased'} by ₹${Math.abs(amount)}/gram`,
       modifiedCount: modified, 
       amount,
-      note: 'Adjustment will be applied to live rates from RB Goldspot'
+      note: 'Adjustment will be applied to live rates from RB Goldspot/Vercel endpoints'
     });
   } catch (error) {
     console.error('Admin adjust rates error:', error);
