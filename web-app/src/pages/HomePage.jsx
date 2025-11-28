@@ -52,16 +52,20 @@ function HomePage() {
 
   const pollRates = async () => {
     try {
-      const response = await api.get('/rates', { timeout: 10000 });
+      // Add cache-busting timestamp to ensure fresh data
+      const response = await api.get('/rates', { 
+        timeout: 10000,
+        params: { _t: Date.now() } // Cache busting
+      });
       const newRates = response.data;
       const updateTime = new Date();
 
-      if (newRates && newRates.length > 0) {
+      if (newRates && Array.isArray(newRates) && newRates.length > 0) {
         setLastUpdateTime(updateTime);
         setLoading(false);
 
         setRates((prevRates) => {
-          return newRates.map((newRate) => {
+          const updatedRates = newRates.map((newRate) => {
             const prevRate = prevRates.find(
               (rate) =>
                 rate._id?.toString() === newRate._id?.toString() ||
@@ -72,8 +76,9 @@ function HomePage() {
 
             const rateKey = newRate._id?.toString() || `${newRate.name}-${newRate.weight?.value}`;
 
+            // Check if rate changed (use smaller threshold for more sensitive updates)
             if (prevRate) {
-              const rateChanged = Math.abs(prevRate.ratePerGram - newRate.ratePerGram) > 0.001;
+              const rateChanged = Math.abs((prevRate.ratePerGram || 0) - (newRate.ratePerGram || 0)) > 0.0001;
 
               if (rateChanged) {
                 setPreviousRates((prev) => ({
@@ -81,7 +86,7 @@ function HomePage() {
                   [rateKey]: {
                     oldRate: prevRate.ratePerGram,
                     newRate: newRate.ratePerGram,
-                    isUp: newRate.ratePerGram > prevRate.ratePerGram,
+                    isUp: (newRate.ratePerGram || 0) > (prevRate.ratePerGram || 0),
                     timestamp: Date.now(),
                   },
                 }));
@@ -94,6 +99,17 @@ function HomePage() {
                   });
                 }, 1500);
               }
+            } else {
+              // New rate, show as updated
+              setPreviousRates((prev) => ({
+                ...prev,
+                [rateKey]: {
+                  oldRate: 0,
+                  newRate: newRate.ratePerGram,
+                  isUp: true,
+                  timestamp: Date.now(),
+                },
+              }));
             }
 
             return {
@@ -101,12 +117,18 @@ function HomePage() {
               lastUpdated: newRate.lastUpdated || updateTime,
             };
           });
+          
+          return updatedRates;
         });
+      } else {
+        console.warn('No rates received from API');
       }
     } catch (error) {
+      // Log error occasionally to avoid spam
       if (Math.random() < 0.1) {
-        console.warn('Polling error:', error.message);
+        console.warn('Polling error:', error.message, error.response?.status);
       }
+      // Don't stop polling on error - continue trying
     }
   };
 
