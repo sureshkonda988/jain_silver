@@ -78,10 +78,13 @@ router.get('/', async (req, res) => {
           ratePerGram = baseRatePerGram * 1.005;
         }
         
-        ratePerGram = Math.round(ratePerGram * 100) / 100;
+        // Apply manual adjustment if exists (can be negative for decrease)
+        const manualAdjustment = rate.manualAdjustment || 0;
+        ratePerGram = ratePerGram + manualAdjustment;
+        ratePerGram = Math.max(0, Math.round(ratePerGram * 100) / 100); // Ensure non-negative
         
-        // Only update if change is significant (> 0.01) to reduce DB writes
-        if (Math.abs(rate.ratePerGram - ratePerGram) > 0.01) {
+        // Always update to ensure live rates (remove threshold check for real-time updates)
+        if (Math.abs(rate.ratePerGram - ratePerGram) > 0.001) {
           // Calculate total rate based on weight
           let weightInGrams = rate.weight.value;
           if (rate.weight.unit === 'kg') {
