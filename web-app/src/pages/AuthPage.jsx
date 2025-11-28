@@ -37,11 +37,15 @@ function AuthPage() {
     setError('');
 
     try {
-      const response = await api.post('/auth/signin', {
-        email: usePhone ? undefined : email.toLowerCase().trim(),
-        phone: usePhone ? phone.trim() : undefined,
-        password,
-      });
+      // Build request body - only include defined fields
+      const signinData = { password };
+      if (usePhone) {
+        signinData.phone = phone.trim();
+      } else {
+        signinData.email = email.toLowerCase().trim();
+      }
+      
+      const response = await api.post('/auth/signin', signinData);
 
       if (response.data.token && response.data.user) {
         await login(response.data.token, response.data.user);

@@ -25,20 +25,54 @@ function AdminDashboardPage() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const pendingResponse = await api.get('/admin/pending-users');
-      setPendingUsers(pendingResponse.data || []);
       
-      // Try to fetch all users, but don't fail if endpoint doesn't exist
+      // Check if user is authenticated
+      const token = localStorage.getItem('token');
+      if (!token) {
+        alert('You are not authenticated. Please sign in again.');
+        navigate('/admin/login');
+        return;
+      }
+      
+      try {
+        const pendingResponse = await api.get('/admin/pending-users');
+        setPendingUsers(pendingResponse.data || []);
+      } catch (pendingError) {
+        console.error('Error fetching pending users:', pendingError);
+        const errorMsg = pendingError.response?.data?.message || pendingError.message || 'Failed to fetch pending users';
+        if (pendingError.response?.status === 401 || pendingError.response?.status === 403) {
+          alert(`Authentication error: ${errorMsg}. Please sign in again.`);
+          navigate('/admin/login');
+          return;
+        }
+        alert(`Failed to fetch pending users: ${errorMsg}`);
+        setPendingUsers([]);
+      }
+      
+      // Try to fetch all users
       try {
         const allResponse = await api.get('/admin/users');
         setAllUsers(allResponse.data || []);
       } catch (allUsersError) {
-        console.warn('All users endpoint not available, using pending users only');
-        setAllUsers(pendingResponse.data || []);
+        console.error('Error fetching all users:', allUsersError);
+        const errorMsg = allUsersError.response?.data?.message || allUsersError.message || 'Failed to fetch all users';
+        if (allUsersError.response?.status === 401 || allUsersError.response?.status === 403) {
+          // Already handled above, just use pending users
+          setAllUsers(pendingUsers);
+        } else {
+          console.warn('All users endpoint not available, using pending users only');
+          setAllUsers(pendingUsers);
+        }
       }
     } catch (error) {
       console.error('Error fetching users:', error);
-      alert('Failed to fetch users. Please try again.');
+      const errorMsg = error.response?.data?.message || error.message || 'Failed to fetch users';
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        alert(`Authentication error: ${errorMsg}. Please sign in again.`);
+        navigate('/admin/login');
+      } else {
+        alert(`Failed to fetch users: ${errorMsg}`);
+      }
     } finally {
       setLoading(false);
     }

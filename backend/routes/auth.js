@@ -700,8 +700,8 @@ router.post('/resend-otp',
 // Sign in
 router.post('/signin',
   [
-    body('email').optional().isEmail().withMessage('Valid email is required'),
-    body('phone').optional().isMobilePhone('en-IN').withMessage('Valid phone is required'),
+    body('email').optional({ checkFalsy: true }).isEmail().withMessage('Valid email is required'),
+    body('phone').optional({ checkFalsy: true }).isMobilePhone('en-IN').withMessage('Valid phone is required'),
     body('password').notEmpty().withMessage('Password is required')
   ],
   async (req, res) => {
@@ -726,16 +726,24 @@ router.post('/signin',
         }
       }
 
+      const { email, phone, password } = req.body;
+
+      // Validate that at least one identifier is provided (before express-validator)
+      if (!email && !phone) {
+        return res.status(400).json({ 
+          message: 'Email or phone is required',
+          errors: [{ msg: 'Either email or phone must be provided', param: 'email' }]
+        });
+      }
+
+      // Run express-validator
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         console.error('❌ Validation errors:', errors.array());
-        return res.status(400).json({ errors: errors.array() });
-      }
-
-      const { email, phone, password } = req.body;
-
-      if (!email && !phone) {
-        return res.status(400).json({ message: 'Email or phone is required' });
+        return res.status(400).json({ 
+          message: 'Validation failed',
+          errors: errors.array() 
+        });
       }
 
       console.log('🔐 Sign in attempt:', { email: email || undefined, phone: phone || undefined });
