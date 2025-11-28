@@ -409,6 +409,16 @@ if (!process.env.VERCEL) {
     console.log(`📱 Accessible from network at: http://${localIP}:${PORT}`);
     console.log(`🌐 API endpoints available at: http://${localIP}:${PORT}/api`);
     console.log(`\n💡 Update mobile app config with: http://${localIP}:${PORT}`);
+  }).on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${PORT} is already in use.`);
+      console.error(`   Solution: Kill the process using port ${PORT} or change PORT in .env`);
+      console.error(`   On Windows: netstat -ano | findstr :${PORT}`);
+      console.error(`   Then: taskkill /PID <PID> /F`);
+    } else {
+      console.error('❌ Server error:', err.message);
+    }
+    process.exit(1);
   });
 }
 
