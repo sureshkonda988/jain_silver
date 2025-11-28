@@ -50,8 +50,21 @@ const uploadToS3Middleware = async (req, res, next) => {
                 file.key = key;
                 file.storage = 's3';
                 console.log(`✅ Uploaded ${fieldName} to S3: ${key}`);
+                console.log(`   CloudFront URL: ${url}`);
               }).catch((s3Error) => {
                 console.error(`❌ S3 upload failed for ${fieldName}:`, s3Error.message);
+                console.error(`   Error details:`, {
+                  code: s3Error.code,
+                  name: s3Error.name,
+                  message: s3Error.message
+                });
+                
+                // If ACL error, provide helpful message
+                if (s3Error.message && s3Error.message.includes('ACL')) {
+                  console.error(`   💡 Fix: Enable ACLs on S3 bucket or configure bucket policy`);
+                  console.error(`   📖 See: backend/S3_BUCKET_ACL_FIX.md for instructions`);
+                }
+                
                 // Fallback to local if S3 fails and platform allows it
                 if (fileStorage.fallbackToLocal) {
                   return saveToLocal(file);
