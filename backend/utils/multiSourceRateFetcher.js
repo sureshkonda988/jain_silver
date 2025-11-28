@@ -19,7 +19,7 @@ const fetchFromRBGoldspot = async () => {
         'Accept': 'text/plain, text/html, */*',
         'Accept-Language': 'en-US,en;q=0.9',
       },
-      timeout: 5000, // 5 second timeout
+      timeout: 8000, // 8 second timeout (RB Goldspot can be slow)
       maxRedirects: 5,
       responseType: 'text'
     });
@@ -149,7 +149,7 @@ const fetchFromVercel = async () => {
         'Accept': 'text/event-stream, application/json, */*',
         'Accept-Language': 'en-US,en;q=0.9',
       },
-      timeout: 5000, // 5 second timeout
+      timeout: 8000, // 8 second timeout (RB Goldspot can be slow)
       maxRedirects: 5,
       responseType: 'text'
     });
