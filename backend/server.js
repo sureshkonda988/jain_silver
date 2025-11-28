@@ -117,8 +117,6 @@ app.options('*', (req, res) => {
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD');
   res.header('Access-Control-Allow-Headers', 
     'Content-Type, Authorization, X-Requested-With, Accept, Content-Length, Origin, X-HTTP-Method-Override, Cache-Control, Pragma');
-    'Content-Type, Authorization, X-Requested-With, Accept, Content-Length, Origin, X-HTTP-Method-Override'
-  );
   res.header('Access-Control-Max-Age', '86400');
   res.sendStatus(204);
 });
