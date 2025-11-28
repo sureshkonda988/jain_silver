@@ -137,6 +137,13 @@ router.get('/register', (req, res) => {
 // Register new user - POST handler
 router.post('/register',
   (req, res, next) => {
+    // Set CORS headers on every request (for React Native)
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    res.header('Access-Control-Allow-Headers', 
+      'Content-Type, Authorization, X-Requested-With, Accept, Content-Length, Origin'
+    );
+    
     console.log('✅ POST /api/auth/register - Registration request received');
     const contentLength = req.headers['content-length'];
     const contentType = req.headers['content-type'] || '';

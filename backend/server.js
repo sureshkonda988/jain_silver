@@ -84,21 +84,39 @@ if (!platform || !platform.isVercel) {
   app.set('io', io);
 }
 
-// Middleware - CORS configuration
+// Middleware - CORS configuration (must be before routes)
+// Allow all origins and headers for React Native compatibility
 app.use(cors({
   origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Content-Length'],
-  exposedHeaders: ['Content-Length', 'Content-Type'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With', 
+    'Accept', 
+    'Content-Length',
+    'Origin',
+    'X-HTTP-Method-Override',
+    'Access-Control-Allow-Origin',
+    'Access-Control-Allow-Headers',
+    'Access-Control-Allow-Methods'
+  ],
+  exposedHeaders: ['Content-Length', 'Content-Type', 'Authorization'],
   credentials: false,
-  maxAge: 86400 // 24 hours
+  maxAge: 86400, // 24 hours
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
 
-// Handle preflight requests explicitly
+// Handle preflight requests explicitly - must be before other routes
 app.options('*', (req, res) => {
+  console.log('🔄 OPTIONS preflight request:', req.path);
   res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Content-Length');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD');
+  res.header('Access-Control-Allow-Headers', 
+    'Content-Type, Authorization, X-Requested-With, Accept, Content-Length, Origin, X-HTTP-Method-Override'
+  );
+  res.header('Access-Control-Max-Age', '86400');
   res.sendStatus(204);
 });
 
