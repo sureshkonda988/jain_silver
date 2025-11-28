@@ -42,15 +42,16 @@ const updateRatesInBackground = async () => {
   try {
     const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
     
-    // Fetch with shorter timeout for background updates
+    // Fetch with timeout for background updates
     const liveRate = await Promise.race([
       fetchSilverRatesFromMultipleSources(),
       new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Background timeout')), 5000) // 5s for background
+        setTimeout(() => reject(new Error('Background timeout')), 8000) // 8s for background
       )
     ]);
 
     if (liveRate && liveRate.ratePerGram && liveRate.ratePerGram > 0) {
+      const oldRate = cachedBaseRate.ratePerGram;
       cachedBaseRate = {
         ratePerGram: liveRate.ratePerGram,
         ratePerKg: liveRate.ratePerKg || (liveRate.ratePerGram * 1000),
@@ -59,13 +60,22 @@ const updateRatesInBackground = async () => {
         usdInrRate: liveRate.usdInrRate || 89.25
       };
       
+      // Log update
+      if (Math.abs(oldRate - liveRate.ratePerGram) > 0.01) {
+        console.log(`✅ Rate updated: ₹${oldRate.toFixed(2)} → ₹${liveRate.ratePerGram.toFixed(2)}/gram (${liveRate.source || 'live'})`);
+      }
+      
       // Update MongoDB in background (don't block)
-      updateMongoDBRates(liveRate).catch(() => {});
+      updateMongoDBRates(liveRate).catch((err) => {
+        console.error('❌ MongoDB update failed:', err.message);
+      });
+    } else {
+      console.warn('⚠️ Invalid rate received in background update:', liveRate);
     }
   } catch (error) {
-    // Silently fail in background - use cached rate
-    if (Math.random() < 0.01) { // Log 1% of failures to avoid spam
-      console.warn('⚠️ Background rate update failed, using cache:', error.message);
+    // Log errors more frequently to debug
+    if (Math.random() < 0.1) { // Log 10% of failures
+      console.warn('⚠️ Background rate update failed:', error.message);
     }
   }
 };
@@ -75,6 +85,7 @@ const updateMongoDBRates = async (liveRate) => {
   try {
     const mongoose = require('mongoose');
     if (mongoose.connection.readyState !== 1) {
+      console.warn('⚠️ MongoDB not connected, skipping rate update');
       return; // Skip if not connected
     }
 
@@ -92,46 +103,56 @@ const updateMongoDBRates = async (liveRate) => {
       { name: 'Silver Jewelry 99.9%', type: 'jewelry', weight: { value: 1, unit: 'grams' }, purity: '99.9%' }
     ];
 
+    let updatedCount = 0;
     for (const rateDef of rateDefinitions) {
-      let ratePerGram = baseRatePerGram;
-      if (rateDef.purity === '92.5%') {
-        ratePerGram = baseRatePerGram * 0.96;
-      } else if (rateDef.purity === '99.99%') {
-        ratePerGram = baseRatePerGram * 1.005;
+      try {
+        let ratePerGram = baseRatePerGram;
+        if (rateDef.purity === '92.5%') {
+          ratePerGram = baseRatePerGram * 0.96;
+        } else if (rateDef.purity === '99.99%') {
+          ratePerGram = baseRatePerGram * 1.005;
+        }
+
+        const manualAdjustment = manualAdjustments[rateDef.name]?.manualAdjustment || 0;
+        ratePerGram = ratePerGram + manualAdjustment;
+        ratePerGram = Math.max(0, Math.round(ratePerGram * 100) / 100);
+
+        let weightInGrams = rateDef.weight.value;
+        if (rateDef.weight.unit === 'kg') {
+          weightInGrams = rateDef.weight.value * 1000;
+        } else if (rateDef.weight.unit === 'oz') {
+          weightInGrams = rateDef.weight.value * 28.35;
+        }
+
+        const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
+
+        await SilverRate.findOneAndUpdate(
+          { name: rateDef.name, location: 'Andhra Pradesh' },
+          {
+            name: rateDef.name,
+            type: rateDef.type,
+            weight: rateDef.weight,
+            purity: rateDef.purity,
+            ratePerGram: ratePerGram,
+            rate: totalRate,
+            lastUpdated: new Date(),
+            location: 'Andhra Pradesh',
+            unit: 'INR',
+            manualAdjustment: manualAdjustment
+          },
+          { upsert: true, new: true }
+        );
+        updatedCount++;
+      } catch (err) {
+        console.error(`❌ Failed to update ${rateDef.name}:`, err.message);
       }
-
-      const manualAdjustment = manualAdjustments[rateDef.name]?.manualAdjustment || 0;
-      ratePerGram = ratePerGram + manualAdjustment;
-      ratePerGram = Math.max(0, Math.round(ratePerGram * 100) / 100);
-
-      let weightInGrams = rateDef.weight.value;
-      if (rateDef.weight.unit === 'kg') {
-        weightInGrams = rateDef.weight.value * 1000;
-      } else if (rateDef.weight.unit === 'oz') {
-        weightInGrams = rateDef.weight.value * 28.35;
-      }
-
-      const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
-
-      await SilverRate.findOneAndUpdate(
-        { name: rateDef.name, location: 'Andhra Pradesh' },
-        {
-          name: rateDef.name,
-          type: rateDef.type,
-          weight: rateDef.weight,
-          purity: rateDef.purity,
-          ratePerGram: ratePerGram,
-          rate: totalRate,
-          lastUpdated: new Date(),
-          location: 'Andhra Pradesh',
-          unit: 'INR',
-          manualAdjustment: manualAdjustment
-        },
-        { upsert: true, new: true }
-      ).catch(() => {});
+    }
+    
+    if (updatedCount > 0 && Math.random() < 0.1) { // Log 10% of successful updates
+      console.log(`✅ Updated ${updatedCount} rates in MongoDB`);
     }
   } catch (error) {
-    // Silently fail - MongoDB update is optional
+    console.error('❌ MongoDB rate update error:', error.message);
   }
 };
 
@@ -309,13 +330,22 @@ router.post('/initialize', async (req, res) => {
           lastUpdated: lastRate.lastUpdated || new Date(),
           usdInrRate: 89.25
         };
+        console.log(`✅ Loaded cached rate from MongoDB: ₹${lastRate.ratePerGram}/gram`);
+      } else {
+        console.log('⚠️ No rates found in MongoDB, using default cache');
       }
+    } else {
+      console.warn('⚠️ MongoDB not connected, using default cache');
     }
     
     // Start background updater
     startBackgroundRateUpdater();
     
-    res.json({ message: 'Rate system initialized. Background updater started.' });
+    res.json({ 
+      message: 'Rate system initialized. Background updater started.',
+      currentRate: cachedBaseRate.ratePerGram,
+      source: cachedBaseRate.source
+    });
   } catch (error) {
     console.error('Initialize rates error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
