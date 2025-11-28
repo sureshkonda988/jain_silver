@@ -95,38 +95,41 @@ router.get('/', async (req, res) => {
           ratePerGram = ratePerGram + manualAdjustment;
           ratePerGram = Math.max(0, Math.round(ratePerGram * 100) / 100); // Ensure non-negative
           
-          // Always update to ensure live rates (remove threshold check for real-time updates)
-          if (Math.abs(rate.ratePerGram - ratePerGram) > 0.001) {
-            // Calculate total rate based on weight
-            let weightInGrams = rate.weight.value;
-            if (rate.weight.unit === 'kg') {
-              weightInGrams = rate.weight.value * 1000;
-            } else if (rate.weight.unit === 'oz') {
-              weightInGrams = rate.weight.value * 28.35;
-            }
-            
-            const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
-            
-            // Batch update
-            updatePromises.push(
-              SilverRate.findByIdAndUpdate(rate._id, {
-                ratePerGram: ratePerGram,
-                rate: totalRate,
-                lastUpdated: new Date()
-              })
-            );
-            
-            updatedCount++;
-          } else {
-            // Even if rate didn't change, ensure manualAdjustment is applied for response
-            rate.ratePerGram = ratePerGram;
+          // Always update to ensure live rates (update in memory immediately for response)
+          // Calculate total rate based on weight
+          let weightInGrams = rate.weight.value;
+          if (rate.weight.unit === 'kg') {
+            weightInGrams = rate.weight.value * 1000;
+          } else if (rate.weight.unit === 'oz') {
+            weightInGrams = rate.weight.value * 28.35;
           }
+          
+          const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
+          
+          // Update in memory immediately for response (don't wait for DB)
+          rate.ratePerGram = ratePerGram;
+          rate.rate = totalRate;
+          rate.lastUpdated = new Date();
+          
+          // Also update in database (async, don't block response)
+          updatePromises.push(
+            SilverRate.findByIdAndUpdate(rate._id, {
+              ratePerGram: ratePerGram,
+              rate: totalRate,
+              lastUpdated: new Date()
+            })
+          );
+          
+          updatedCount++;
         }
         
-        // Execute all updates in parallel
+        // Execute all updates in parallel (don't await - return immediately with updated in-memory rates)
         if (updatePromises.length > 0) {
-          await Promise.all(updatePromises);
-          console.log(`✅ Updated ${updatedCount} rates with live data`);
+          Promise.all(updatePromises).then(() => {
+            console.log(`✅ Updated ${updatedCount} rates in database with live data`);
+          }).catch(err => {
+            console.error('❌ Error updating rates in database:', err.message);
+          });
         }
         
         ratesUpdated = updatedCount > 0;
