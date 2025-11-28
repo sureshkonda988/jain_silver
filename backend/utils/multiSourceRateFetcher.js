@@ -28,6 +28,8 @@ const fetchFromRBGoldspot = async () => {
     console.log('Response preview:', response.data?.substring(0, 300) || 'No data');
 
     // Parse tab-separated format
+    // Format from API: ID	Name	Bid	Ask	High	Low	Status
+    // Example: 2966	Silver 999 	-	169399	170256	167100	InStock
     const lines = response.data.split('\n');
     let ratePerKg = null;
     let ratePerGram = null;
@@ -37,52 +39,52 @@ const fetchFromRBGoldspot = async () => {
       const trimmedLine = line.trim();
       if (!trimmedLine) continue;
 
-      // Split by tabs or multiple spaces
-      const parts = trimmedLine.split(/\s{2,}|\t/).filter(p => p.trim());
+      // Split by tabs (primary) or multiple spaces (fallback)
+      const parts = trimmedLine.split(/\t/).length > 1 
+        ? trimmedLine.split(/\t/).map(p => p.trim())
+        : trimmedLine.split(/\s{2,}/).map(p => p.trim()).filter(p => p);
       
       if (parts.length >= 4) {
-        const id = parts[0].trim();
-        const name = parts[1].trim();
-        // Format: ID	Name	Bid	Ask	High	Low	Status
-        // For Silver 999, columns are: 2966	Silver 999 	-	166685	168779	165330	InStock
-        // So: parts[0]=ID, parts[1]=Name, parts[2]=Bid, parts[3]=Ask (per kg)
-        const bid = parts.length > 2 ? parts[2].trim() : '';
-        const ask = parts.length > 3 ? parts[3].trim() : '';
+        const id = parts[0];
+        const name = parts[1];
+        const bid = parts.length > 2 ? parts[2] : '';
+        const ask = parts.length > 3 ? parts[3] : '';
+        const high = parts.length > 4 ? parts[4] : '';
+        const low = parts.length > 5 ? parts[5] : '';
 
         // Look for Silver 999 (ID: 2966 or name contains "Silver 999")
-        if ((id === '2966' || name.toLowerCase().includes('silver 999')) && 
+        // Exclude "Silver Mini 999" (ID: 2987)
+        if ((id === '2966' || (name && name.toLowerCase().includes('silver 999'))) && 
+            id !== '2987' && 
             !name.toLowerCase().includes('mini')) {
-          silver999Data = { id, name, bid, ask };
-          console.log(`✅ Found Silver 999: ID=${id}, Name=${name}, Bid=${bid}, Ask=${ask}`);
+          silver999Data = { id, name, bid, ask, high, low };
+          console.log(`✅ Found Silver 999: ID=${id}, Name="${name}", Bid=${bid}, Ask=${ask}, High=${high}`);
           
-          // Use "ask" price (4th column, per kg) - this is the selling price
-          if (ask && ask !== '-' && ask !== '' && ask !== '0') {
+          // Priority: Ask > High > Bid (Ask is selling price, most relevant)
+          if (ask && ask !== '-' && ask !== '' && ask !== '0' && !isNaN(parseFloat(ask))) {
             ratePerKg = parseFloat(ask);
-            if (!isNaN(ratePerKg) && ratePerKg > 0) {
+            if (ratePerKg > 0) {
               ratePerGram = ratePerKg / 1000;
-              console.log(`✅ Using Ask price: ₹${ratePerKg}/kg = ₹${ratePerGram}/gram`);
+              console.log(`✅ Using Ask price: ₹${ratePerKg}/kg = ₹${ratePerGram.toFixed(3)}/gram`);
               break;
             }
           }
-          // If ask not available, try bid (3rd column)
-          if (!ratePerGram && bid && bid !== '-' && bid !== '' && bid !== '0') {
+          // Try High price if Ask not available
+          if (!ratePerGram && high && high !== '-' && high !== '' && high !== '0' && !isNaN(parseFloat(high))) {
+            ratePerKg = parseFloat(high);
+            if (ratePerKg > 0) {
+              ratePerGram = ratePerKg / 1000;
+              console.log(`✅ Using High price: ₹${ratePerKg}/kg = ₹${ratePerGram.toFixed(3)}/gram`);
+              break;
+            }
+          }
+          // Try Bid price as last resort
+          if (!ratePerGram && bid && bid !== '-' && bid !== '' && bid !== '0' && !isNaN(parseFloat(bid))) {
             ratePerKg = parseFloat(bid);
-            if (!isNaN(ratePerKg) && ratePerKg > 0) {
+            if (ratePerKg > 0) {
               ratePerGram = ratePerKg / 1000;
-              console.log(`✅ Using Bid price: ₹${ratePerKg}/kg = ₹${ratePerGram}/gram`);
+              console.log(`✅ Using Bid price: ₹${ratePerKg}/kg = ₹${ratePerGram.toFixed(3)}/gram`);
               break;
-            }
-          }
-          // Try High price (5th column) if available
-          if (!ratePerGram && parts.length > 4) {
-            const high = parts[4].trim();
-            if (high && high !== '-' && high !== '' && high !== '0') {
-              ratePerKg = parseFloat(high);
-              if (!isNaN(ratePerKg) && ratePerKg > 0) {
-                ratePerGram = ratePerKg / 1000;
-                console.log(`✅ Using High price: ₹${ratePerKg}/kg = ₹${ratePerGram}/gram`);
-                break;
-              }
             }
           }
         }
