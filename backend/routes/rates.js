@@ -47,19 +47,17 @@ router.get('/', async (req, res) => {
       console.log('🔄 Fetching live rates from RB Goldspot...');
       const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
       
-      // Fetch live rates with timeout handling (increased timeout for slow API)
+      // Fetch live rates with aggressive timeout for real-time updates (every second)
       try {
         liveRate = await Promise.race([
           fetchSilverRatesFromMultipleSources(),
           new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('RB Goldspot API timeout')), 12000) // Increased to 12 seconds
+            setTimeout(() => reject(new Error('RB Goldspot API timeout')), 6000) // 6 seconds max for real-time updates
           )
         ]);
       } catch (timeoutError) {
         // Timeout occurred - continue with null liveRate and use cached rates
-        if (Math.random() < 0.1) { // Log only 10% of timeouts to avoid spam
-          console.warn('⚠️ Rate fetch timeout, will use cached rates');
-        }
+        // Don't log timeouts to avoid spam (happens frequently with 1-second polling)
         liveRate = null;
       }
       

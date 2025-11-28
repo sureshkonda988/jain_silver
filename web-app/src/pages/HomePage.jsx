@@ -52,11 +52,14 @@ function HomePage() {
 
   const pollRates = async () => {
     try {
-      // Add cache-busting timestamp to ensure fresh data
+      // Add cache-busting timestamp to ensure fresh data every second
       const response = await api.get('/rates', { 
-        timeout: 15000, // Increased timeout to 15 seconds
-        params: { _t: Date.now() }, // Cache busting
-        signal: AbortSignal.timeout(15000) // Additional timeout protection
+        timeout: 8000, // 8 seconds timeout for faster updates
+        params: { _t: Date.now() }, // Cache busting - ensures fresh data
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
       });
       const newRates = response.data;
       const updateTime = new Date();

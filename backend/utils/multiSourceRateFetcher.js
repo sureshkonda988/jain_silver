@@ -18,10 +18,13 @@ const fetchFromRBGoldspot = async () => {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'text/plain, text/html, */*',
         'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
       },
-      timeout: 8000, // 8 second timeout (RB Goldspot can be slow)
+      timeout: 5000, // Reduced to 5 seconds for faster updates
       maxRedirects: 5,
-      responseType: 'text'
+      responseType: 'text',
+      params: { _t: Date.now() } // Cache busting
     });
 
     console.log('✅ Received response from RB Goldspot');
@@ -39,34 +42,30 @@ const fetchFromRBGoldspot = async () => {
       const trimmedLine = line.trim();
       if (!trimmedLine) continue;
 
-      // Split by tabs (primary) or multiple spaces (fallback)
-      const parts = trimmedLine.split(/\t/).length > 1 
-        ? trimmedLine.split(/\t/).map(p => p.trim())
-        : trimmedLine.split(/\s{2,}/).map(p => p.trim()).filter(p => p);
+      // Split by tabs (exact format: ID	Name	Bid	Ask	High	Low	Status)
+      // Example: 2966	Silver 999 	-	168889	170256	167100	InStock
+      const parts = trimmedLine.split(/\t/);
       
-      if (parts.length >= 4) {
-        const id = parts[0];
-        const name = parts[1];
-        const bid = parts.length > 2 ? parts[2] : '';
-        const ask = parts.length > 3 ? parts[3] : '';
-        const high = parts.length > 4 ? parts[4] : '';
-        const low = parts.length > 5 ? parts[5] : '';
+      if (parts.length >= 6) {
+        const id = parts[0].trim();
+        const name = parts[1].trim();
+        const bid = parts[2].trim();
+        const ask = parts[3].trim();
+        const high = parts[4].trim();
+        const low = parts[5].trim();
 
-        // Look for Silver 999 (ID: 2966 or name contains "Silver 999")
+        // Look for Silver 999 (ID: 2966) - exact match
         // Exclude "Silver Mini 999" (ID: 2987)
-        if ((id === '2966' || (name && name.toLowerCase().includes('silver 999'))) && 
-            id !== '2987' && 
-            !name.toLowerCase().includes('mini')) {
+        if (id === '2966' && !name.toLowerCase().includes('mini')) {
           silver999Data = { id, name, bid, ask, high, low };
-          console.log(`✅ Found Silver 999: ID=${id}, Name="${name}", Bid=${bid}, Ask=${ask}, High=${high}`);
           
           // Priority: Ask > High > Bid (Ask is selling price, most relevant)
+          // Format: Ask price is per kg, convert to per gram
           if (ask && ask !== '-' && ask !== '' && ask !== '0' && !isNaN(parseFloat(ask))) {
             ratePerKg = parseFloat(ask);
             if (ratePerKg > 0) {
               ratePerGram = ratePerKg / 1000;
-              console.log(`✅ Using Ask price: ₹${ratePerKg}/kg = ₹${ratePerGram.toFixed(3)}/gram`);
-              break;
+              break; // Found rate, exit loop
             }
           }
           // Try High price if Ask not available
@@ -74,7 +73,6 @@ const fetchFromRBGoldspot = async () => {
             ratePerKg = parseFloat(high);
             if (ratePerKg > 0) {
               ratePerGram = ratePerKg / 1000;
-              console.log(`✅ Using High price: ₹${ratePerKg}/kg = ₹${ratePerGram.toFixed(3)}/gram`);
               break;
             }
           }
@@ -83,7 +81,6 @@ const fetchFromRBGoldspot = async () => {
             ratePerKg = parseFloat(bid);
             if (ratePerKg > 0) {
               ratePerGram = ratePerKg / 1000;
-              console.log(`✅ Using Bid price: ₹${ratePerKg}/kg = ₹${ratePerGram.toFixed(3)}/gram`);
               break;
             }
           }
