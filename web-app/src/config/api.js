@@ -4,7 +4,7 @@ const API_BASE_URL = 'https://jain-silver.vercel.app/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 15000,
+  timeout: 20000, // Increased timeout to 20 seconds
   maxContentLength: 50 * 1024 * 1024,
   maxBodyLength: 50 * 1024 * 1024,
   headers: {

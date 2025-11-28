@@ -7,10 +7,32 @@ const adminAuth = require('../middleware/adminAuth');
 // Root route - get store information from MongoDB
 router.get('/', async (req, res) => {
   try {
+    // Default store info
+    const defaultStoreInfo = {
+      welcomeMessage: 'Welcome to Jain Silver Plaza - Your trusted partner for premium silver products. We offer the best quality silver coins, bars, and jewelry with transparent pricing and excellent customer service.',
+      address: 'Governerpet, Vijayawada, Andhra Pradesh, Gopala Reddy Road, Governerpet, Vijayawada-520002, Andhra Pradesh',
+      phoneNumber: '+91 98480 34323',
+      storeTimings: [
+        { day: 'Monday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Tuesday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Wednesday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Thursday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Friday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Saturday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Sunday', openTime: '10:00 AM', closeTime: '06:00 PM', isClosed: false },
+      ],
+      instagram: 'https://www.instagram.com/jainsilverplaza?igsh=MWJrcWlzbjVhcW1jNw==',
+      facebook: 'https://www.facebook.com/share/1CaCEfRxST/',
+      youtube: 'https://youtube.com/@jainsilverplaza6932?si=IluQGMU-eNMVx75A',
+      rating: 4.4,
+      totalRatings: 84,
+      mapLink: 'https://www.google.com/maps/place/16%C2%B030\'41.3%22N+80%C2%B037\'33.3%22E/@16.511483,80.62592,17z/data=!3m1!1b4!4m4!3m3!8m2!3d16.511483!4d80.62592?entry=ttu&g_ep=EgoyMDI1MTEyMy4xIKXMDSoASAFQAw%3D%3D',
+      bankDetails: []
+    };
+
     // Check MongoDB connection
     const mongoose = require('mongoose');
     if (mongoose.connection.readyState !== 1) {
-      // Try to connect
       try {
         await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/jain_silver', {
           useNewUrlParser: true,
@@ -18,49 +40,85 @@ router.get('/', async (req, res) => {
           serverSelectionTimeoutMS: 5000,
         });
       } catch (connError) {
-        console.error('MongoDB connection failed, returning default data:', connError);
-        // Return default data if MongoDB not connected
-        return res.json({
-        welcomeMessage: 'Welcome to Jain Silver - Your trusted partner for premium silver products. We offer the best quality silver coins, bars, and jewelry with transparent pricing and excellent customer service.',
-        address: 'Andhra Pradesh, India',
-        phoneNumber: '+91 98480 34323',
-        storeTimings: [
-          { day: 'Monday', openTime: '09:00 AM', closeTime: '08:00 PM', isClosed: false },
-          { day: 'Tuesday', openTime: '09:00 AM', closeTime: '08:00 PM', isClosed: false },
-          { day: 'Wednesday', openTime: '09:00 AM', closeTime: '08:00 PM', isClosed: false },
-          { day: 'Thursday', openTime: '09:00 AM', closeTime: '08:00 PM', isClosed: false },
-          { day: 'Friday', openTime: '09:00 AM', closeTime: '08:00 PM', isClosed: false },
-          { day: 'Saturday', openTime: '09:00 AM', closeTime: '08:00 PM', isClosed: false },
-          { day: 'Sunday', openTime: '10:00 AM', closeTime: '06:00 PM', isClosed: false },
-        ],
-        instagram: 'https://www.instagram.com/jainsilverplaza?igsh=MWJrcWlzbjVhcW1jNw==',
-        facebook: 'https://www.facebook.com/share/1CaCEfRxST/',
-        youtube: 'https://youtube.com/@jainsilverplaza6932?si=IluQGMU-eNMVx75A',
-        bankDetails: [
-          {
-            bankName: 'Bank Name',
-            accountNumber: 'XXXXXXXXXXXX',
-            ifscCode: 'XXXX0000000',
-            accountHolderName: 'Jain Silver',
-            branch: 'Branch Name',
-          }
-        ]
-        });
-        return;
+        console.error('MongoDB connection failed, returning default data:', connError.message);
+        return res.json(defaultStoreInfo);
       }
     }
     
-    const storeInfo = await StoreInfo.getStoreInfo();
-    res.json(storeInfo);
+    // Try to get store info from database
+    try {
+      let storeInfo;
+      if (typeof StoreInfo.getStoreInfo === 'function') {
+        storeInfo = await StoreInfo.getStoreInfo();
+      } else {
+        storeInfo = await StoreInfo.findOne();
+        if (!storeInfo) {
+          storeInfo = new StoreInfo(defaultStoreInfo);
+          await storeInfo.save();
+        } else {
+          storeInfo = storeInfo.toObject ? storeInfo.toObject() : storeInfo;
+        }
+      }
+      
+      const mergedInfo = { ...defaultStoreInfo, ...storeInfo };
+      res.json(mergedInfo);
+    } catch (dbError) {
+      console.error('Error fetching store info from database:', dbError.message);
+      res.json(defaultStoreInfo);
+    }
   } catch (error) {
     console.error('Get store info error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    // Return default instead of 500
+    res.json({
+      welcomeMessage: 'Welcome to Jain Silver Plaza - Your trusted partner for premium silver products.',
+      address: 'Governerpet, Vijayawada, Andhra Pradesh, Gopala Reddy Road, Governerpet, Vijayawada-520002, Andhra Pradesh',
+      phoneNumber: '+91 98480 34323',
+      storeTimings: [
+        { day: 'Monday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Tuesday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Wednesday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Thursday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Friday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Saturday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Sunday', openTime: '10:00 AM', closeTime: '06:00 PM', isClosed: false },
+      ],
+      instagram: 'https://www.instagram.com/jainsilverplaza?igsh=MWJrcWlzbjVhcW1jNw==',
+      facebook: 'https://www.facebook.com/share/1CaCEfRxST/',
+      youtube: 'https://youtube.com/@jainsilverplaza6932?si=IluQGMU-eNMVx75A',
+      rating: 4.4,
+      totalRatings: 84,
+      mapLink: 'https://www.google.com/maps/place/16%C2%B030\'41.3%22N+80%C2%B037\'33.3%22E/@16.511483,80.62592,17z/data=!3m1!1b4!4m4!3m3!8m2!3d16.511483!4d80.62592?entry=ttu&g_ep=EgoyMDI1MTEyMy4xIKXMDSoASAFQAw%3D%3D',
+      bankDetails: []
+    });
   }
 });
 
 // Get store information (public endpoint) - alias for root
 router.get('/info', async (req, res) => {
   try {
+    // Default store info to return if MongoDB fails
+    const defaultStoreInfo = {
+      welcomeMessage: 'Welcome to Jain Silver Plaza - Your trusted partner for premium silver products. We offer the best quality silver coins, bars, and jewelry with transparent pricing and excellent customer service.',
+      address: 'Governerpet, Vijayawada, Andhra Pradesh, Gopala Reddy Road, Governerpet, Vijayawada-520002, Andhra Pradesh',
+      phoneNumber: '+91 98480 34323',
+      storeTimings: [
+        { day: 'Monday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Tuesday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Wednesday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Thursday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Friday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Saturday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Sunday', openTime: '10:00 AM', closeTime: '06:00 PM', isClosed: false },
+      ],
+      instagram: 'https://www.instagram.com/jainsilverplaza?igsh=MWJrcWlzbjVhcW1jNw==',
+      facebook: 'https://www.facebook.com/share/1CaCEfRxST/',
+      youtube: 'https://youtube.com/@jainsilverplaza6932?si=IluQGMU-eNMVx75A',
+      rating: 4.4,
+      totalRatings: 84,
+      mapLink: 'https://www.google.com/maps/place/16%C2%B030\'41.3%22N+80%C2%B037\'33.3%22E/@16.511483,80.62592,17z/data=!3m1!1b4!4m4!3m3!8m2!3d16.511483!4d80.62592?entry=ttu&g_ep=EgoyMDI1MTEyMy4xIKXMDSoASAFQAw%3D%3D',
+      bankDetails: []
+    };
+
     // Ensure MongoDB connection
     const mongoose = require('mongoose');
     if (mongoose.connection.readyState !== 1) {
@@ -71,19 +129,60 @@ router.get('/info', async (req, res) => {
           serverSelectionTimeoutMS: 5000,
         });
       } catch (connError) {
-        console.error('MongoDB connection failed:', connError);
-        return res.status(503).json({ 
-          message: 'Database connection unavailable', 
-          error: 'Service temporarily unavailable' 
-        });
+        console.error('MongoDB connection failed, returning default store info:', connError.message);
+        return res.json(defaultStoreInfo);
       }
     }
     
-    const storeInfo = await StoreInfo.getStoreInfo();
-    res.json(storeInfo);
+    // Try to get store info from database
+    try {
+      let storeInfo;
+      if (typeof StoreInfo.getStoreInfo === 'function') {
+        storeInfo = await StoreInfo.getStoreInfo();
+      } else {
+        // Fallback: find one store document
+        storeInfo = await StoreInfo.findOne();
+        if (!storeInfo) {
+          // Create default store info if none exists
+          storeInfo = new StoreInfo(defaultStoreInfo);
+          await storeInfo.save();
+        } else {
+          storeInfo = storeInfo.toObject ? storeInfo.toObject() : storeInfo;
+        }
+      }
+      
+      // Merge with defaults to ensure all fields exist
+      const mergedInfo = { ...defaultStoreInfo, ...storeInfo };
+      res.json(mergedInfo);
+    } catch (dbError) {
+      console.error('Error fetching store info from database:', dbError.message);
+      // Return default info if database query fails
+      res.json(defaultStoreInfo);
+    }
   } catch (error) {
     console.error('Get store info error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    // Always return default info instead of 500 error
+    res.json({
+      welcomeMessage: 'Welcome to Jain Silver Plaza - Your trusted partner for premium silver products.',
+      address: 'Governerpet, Vijayawada, Andhra Pradesh, Gopala Reddy Road, Governerpet, Vijayawada-520002, Andhra Pradesh',
+      phoneNumber: '+91 98480 34323',
+      storeTimings: [
+        { day: 'Monday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Tuesday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Wednesday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Thursday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Friday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Saturday', openTime: '09:00 AM', closeTime: '09:00 PM', isClosed: false },
+        { day: 'Sunday', openTime: '10:00 AM', closeTime: '06:00 PM', isClosed: false },
+      ],
+      instagram: 'https://www.instagram.com/jainsilverplaza?igsh=MWJrcWlzbjVhcW1jNw==',
+      facebook: 'https://www.facebook.com/share/1CaCEfRxST/',
+      youtube: 'https://youtube.com/@jainsilverplaza6932?si=IluQGMU-eNMVx75A',
+      rating: 4.4,
+      totalRatings: 84,
+      mapLink: 'https://www.google.com/maps/place/16%C2%B030\'41.3%22N+80%C2%B037\'33.3%22E/@16.511483,80.62592,17z/data=!3m1!1b4!4m4!3m3!8m2!3d16.511483!4d80.62592?entry=ttu&g_ep=EgoyMDI1MTEyMy4xIKXMDSoASAFQAw%3D%3D',
+      bankDetails: []
+    });
   }
 });
 
