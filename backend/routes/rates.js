@@ -49,10 +49,11 @@ router.get('/', async (req, res) => {
       const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
       
       // Fetch with aggressive timeout - return cached rates quickly if live fetch is slow
+      // Try both sources in parallel for fastest response
       liveRate = await Promise.race([
         fetchSilverRatesFromMultipleSources(),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout')), 3000) // Reduced to 3 seconds
+          setTimeout(() => reject(new Error('Timeout')), 2500) // 2.5 seconds - very fast for 1-second updates
         )
       ]);
     } catch (fetchError) {

@@ -21,7 +21,7 @@ const fetchFromRBGoldspot = async () => {
         'Cache-Control': 'no-cache',
         'Pragma': 'no-cache'
       },
-      timeout: 5000, // Reduced to 5 seconds for faster updates
+      timeout: 4000, // 4 seconds for faster updates
       maxRedirects: 5,
       responseType: 'text',
       params: { _t: Date.now() } // Cache busting
@@ -146,7 +146,7 @@ const fetchFromVercel = async () => {
         'Accept': 'text/event-stream, application/json, */*',
         'Accept-Language': 'en-US,en;q=0.9',
       },
-      timeout: 8000, // 8 second timeout (RB Goldspot can be slow)
+      timeout: 4000, // 4 seconds for faster updates
       maxRedirects: 5,
       responseType: 'text'
     });
@@ -434,7 +434,7 @@ const fetchSilverRatesFromMultipleSources = async () => {
     return await fetchFromCustom(customSource.url);
   }
 
-  // MULTI mode: Try all enabled sources in priority order
+  // MULTI mode: Try all enabled sources in parallel for fastest response
   const enabledSources = Object.values(RATE_SOURCES)
     .filter(source => source.enabled)
     .sort((a, b) => a.priority - b.priority);
@@ -444,10 +444,46 @@ const fetchSilverRatesFromMultipleSources = async () => {
     return null;
   }
 
-  console.log(`🔄 Trying ${enabledSources.length} rate sources in priority order...`);
+  console.log(`🔄 Trying ${enabledSources.length} rate sources in parallel for fastest response...`);
   console.log('  Sources:', enabledSources.map(s => `${s.name} (priority ${s.priority})`).join(', '));
 
-  // Try sources sequentially in priority order (faster than parallel for first success)
+  // Try sources in parallel - return first successful result (fastest)
+  const fetchPromises = enabledSources.map(async (source) => {
+    try {
+      let result = null;
+      if (source.name === 'RB Goldspot') {
+        result = await fetchFromRBGoldspot();
+      } else if (source.name === 'Vercel') {
+        result = await fetchFromVercel();
+      } else if (source.name === 'Custom' && source.url) {
+        result = await fetchFromCustom(source.url);
+      }
+      
+      if (result && result.ratePerGram && result.ratePerGram > 0) {
+        return { source: source.name, result, priority: source.priority };
+      }
+      return null;
+    } catch (error) {
+      // Silently fail - will try other sources
+      return null;
+    }
+  });
+
+  // Wait for all promises, get first successful result (prioritized)
+  const results = await Promise.allSettled(fetchPromises);
+  const successfulResults = results
+    .filter(r => r.status === 'fulfilled' && r.value !== null)
+    .map(r => r.value)
+    .sort((a, b) => a.priority - b.priority); // Sort by priority
+
+  if (successfulResults.length > 0) {
+    const bestResult = successfulResults[0];
+    console.log(`✅ Successfully fetched rate from ${bestResult.source}: ₹${bestResult.result.ratePerGram}/gram`);
+    return bestResult.result;
+  }
+
+  // All sources failed - try sequential fallback as last resort
+  console.warn('⚠️ All parallel fetches failed, trying sequential fallback...');
   for (const source of enabledSources) {
     try {
       let result = null;
@@ -460,14 +496,11 @@ const fetchSilverRatesFromMultipleSources = async () => {
       }
       
       if (result && result.ratePerGram && result.ratePerGram > 0) {
-        console.log(`✅ Successfully fetched rate from ${source.name}: ₹${result.ratePerGram}/gram`);
+        console.log(`✅ Successfully fetched rate from ${source.name} (fallback): ₹${result.ratePerGram}/gram`);
         return result;
-      } else {
-        console.log(`⚠️ ${source.name} returned no valid rate, trying next source...`);
       }
     } catch (error) {
-      console.error(`❌ Error fetching from ${source.name}:`, error.message);
-      console.log(`   Trying next source...`);
+      // Continue to next source
     }
   }
 
