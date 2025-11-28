@@ -34,7 +34,7 @@ router.get('/', async (req, res) => {
       liveRate = await Promise.race([
         fetchSilverRatesFromMultipleSources(),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout after 8 seconds')), 8000) // 8 seconds - more time for both sources
+          setTimeout(() => reject(new Error('Timeout after 15 seconds')), 15000) // 15 seconds - enough time for both sources
         )
       ]);
       

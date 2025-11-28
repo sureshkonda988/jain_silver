@@ -22,7 +22,7 @@ const fetchFromRBGoldspot = async () => {
         'Pragma': 'no-cache',
         'Expires': '0'
       },
-      timeout: 5000, // 5 seconds - enough time for reliable fetch
+      timeout: 10000, // 10 seconds - more time for reliable fetch
       maxRedirects: 5,
       responseType: 'text',
       params: { 
@@ -156,7 +156,7 @@ const fetchFromVercel = async () => {
         'Pragma': 'no-cache',
         'Expires': '0'
       },
-      timeout: 5000, // 5 seconds - enough time for reliable fetch
+      timeout: 10000, // 10 seconds - more time for reliable fetch
       maxRedirects: 5,
       responseType: 'text',
       params: {
@@ -497,8 +497,11 @@ const fetchSilverRatesFromMultipleSources = async () => {
   }
 
   // If parallel failed, try sequential as fallback (RB Goldspot first, then Vercel)
+  // This gives each source a full chance to respond
+  console.log('⚠️ Parallel fetch failed, trying sequential fallback...');
   for (const source of enabledSources) {
     try {
+      console.log(`  🔄 Trying ${source.name} sequentially...`);
       let result = null;
       if (source.name === 'RB Goldspot') {
         result = await fetchFromRBGoldspot();
@@ -509,14 +512,19 @@ const fetchSilverRatesFromMultipleSources = async () => {
       }
       
       if (result && result.ratePerGram && result.ratePerGram > 0) {
+        console.log(`  ✅ ${source.name} succeeded sequentially: ₹${result.ratePerGram}/gram`);
         return result;
+      } else {
+        console.log(`  ⚠️ ${source.name} returned invalid result sequentially`);
       }
     } catch (error) {
+      console.error(`  ❌ ${source.name} failed sequentially:`, error.message);
       // Continue to next source
     }
   }
 
   // All sources failed
+  console.error('❌ All rate sources failed (both parallel and sequential)');
   return null;
 };
 
