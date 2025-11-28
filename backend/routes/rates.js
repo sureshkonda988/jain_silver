@@ -49,31 +49,36 @@ router.get('/', async (req, res) => {
       allRates = []; // Empty array if DB fails
     }
     
-    // Fetch live rates EVERY SECOND - always fetch fresh data (non-blocking, fast timeout)
+    // Fetch live rates EVERY SECOND - ALWAYS fetch fresh data from both sources
     let liveRate = null;
     try {
       const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
       
-      // Fetch with aggressive timeout - return cached rates quickly if live fetch is slow
-      // Try both sources in parallel for fastest response
+      // Fetch with timeout - MUST get live data every second
+      // Both RB Goldspot and Vercel sources are tried in parallel
       liveRate = await Promise.race([
         fetchSilverRatesFromMultipleSources(),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout')), 2500) // 2.5 seconds - very fast for 1-second updates
+          setTimeout(() => reject(new Error('Timeout')), 4000) // 4 seconds - enough time for both sources
         )
       ]);
     } catch (fetchError) {
-      // Fetch failed or timed out - use cached rates (this is fine, happens frequently)
+      // If fetch fails, log occasionally but continue with cached rates
+      // This ensures we always return something, but we should try to get live data
+      if (Math.random() < 0.05) { // Log 5% of failures to avoid spam
+        console.warn('⚠️ Live rate fetch failed, using cached rates:', fetchError.message);
+      }
       liveRate = null;
     }
     
     const currentTime = new Date();
     
-    // If we have a live rate, update all rates in memory
+    // ALWAYS update rates - even if live fetch failed, update timestamps
+    // This ensures frontend sees updates every second
     if (liveRate && liveRate.ratePerGram && liveRate.ratePerGram > 0) {
       const baseRatePerGram = liveRate.ratePerGram;
       
-      // Update rates in memory immediately (for fast response)
+      // Update rates in memory immediately with LIVE data (for fast response)
       allRates = allRates.map(rate => {
         if (!rate.weight || !rate.weight.value) {
           // Still update timestamp even if weight is missing
@@ -106,13 +111,14 @@ router.get('/', async (req, res) => {
         
         const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
         
-        // Return updated rate object with fresh timestamp
+        // Return updated rate object with fresh timestamp and LIVE rate
         return {
           ...rate,
-          ratePerGram: ratePerGram,
-          rate: totalRate,
-          lastUpdated: currentTime, // Always fresh timestamp
-          usdInrRate: liveRate.usdInrRate || rate.usdInrRate
+          ratePerGram: ratePerGram, // LIVE rate from RB Goldspot/Vercel
+          rate: totalRate, // LIVE total rate
+          lastUpdated: currentTime, // ALWAYS fresh timestamp
+          usdInrRate: liveRate.usdInrRate || rate.usdInrRate,
+          source: liveRate.source || 'cache' // Track data source
         };
       });
       
@@ -127,10 +133,12 @@ router.get('/', async (req, res) => {
         )
       ).catch(() => {});
     } else {
-      // Even if no live rate, update timestamps to show we're checking
+      // Even if no live rate fetched, update timestamps to show we're checking
+      // This ensures frontend sees activity every second
       allRates = allRates.map(rate => ({
         ...rate,
-        lastUpdated: currentTime // Update timestamp even for cached rates
+        lastUpdated: currentTime, // Update timestamp even for cached rates
+        source: 'cache' // Indicate this is cached data
       }));
     }
     

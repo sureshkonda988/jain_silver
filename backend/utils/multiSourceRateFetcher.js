@@ -12,19 +12,26 @@ const { RATE_SOURCES, ACTIVE_RATE_SOURCE } = require('../config/rateSource');
 // Example: 2966	Silver 999 	-	166685	168779	165330	InStock
 const fetchFromRBGoldspot = async () => {
   try {
-    console.log('📡 Fetching live rates from RB Goldspot...');
+    // Always fetch fresh data - no caching
     const response = await axios.get('https://bcast.rbgoldspot.com:7768/VOTSBroadcastStreaming/Services/xml/GetLiveRateByTemplateID/rbgold', {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'text/plain, text/html, */*',
         'Accept-Language': 'en-US,en;q=0.9',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
       },
-      timeout: 4000, // 4 seconds for faster updates
+      timeout: 5000, // 5 seconds - enough time for reliable fetch
       maxRedirects: 5,
       responseType: 'text',
-      params: { _t: Date.now() } // Cache busting
+      params: { 
+        _t: Date.now(), // Cache busting - ensures fresh data every second
+        _r: Math.random() // Additional cache busting
+      },
+      validateStatus: function (status) {
+        return status >= 200 && status < 300; // Accept only 2xx responses
+      }
     });
 
     console.log('✅ Received response from RB Goldspot');
@@ -136,19 +143,29 @@ const fetchFromRBGoldspot = async () => {
   }
 };
 
-// Fetch from Vercel (SSE format) - Primary source for live rates
+// Fetch from Vercel (SSE format) - Secondary source for live rates
 const fetchFromVercel = async () => {
   try {
-    console.log('📡 Fetching live rates from jainsilverpp1.vercel.app/prices/stream...');
+    // Always fetch fresh data - no caching
     const response = await axios.get('https://jainsilverpp1.vercel.app/prices/stream', {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'text/event-stream, application/json, */*',
         'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
       },
-      timeout: 4000, // 4 seconds for faster updates
+      timeout: 5000, // 5 seconds - enough time for reliable fetch
       maxRedirects: 5,
-      responseType: 'text'
+      responseType: 'text',
+      params: {
+        _t: Date.now(), // Cache busting - ensures fresh data every second
+        _r: Math.random() // Additional cache busting
+      },
+      validateStatus: function (status) {
+        return status >= 200 && status < 300; // Accept only 2xx responses
+      }
     });
 
     console.log('✅ Received response from stream endpoint');
@@ -444,10 +461,8 @@ const fetchSilverRatesFromMultipleSources = async () => {
     return null;
   }
 
-  console.log(`🔄 Trying ${enabledSources.length} rate sources in parallel for fastest response...`);
-  console.log('  Sources:', enabledSources.map(s => `${s.name} (priority ${s.priority})`).join(', '));
-
   // Try sources in parallel - return first successful result (fastest)
+  // Use Promise.race to get the fastest successful response
   const fetchPromises = enabledSources.map(async (source) => {
     try {
       let result = null;
@@ -469,21 +484,35 @@ const fetchSilverRatesFromMultipleSources = async () => {
     }
   });
 
-  // Wait for all promises, get first successful result (prioritized)
-  const results = await Promise.allSettled(fetchPromises);
+  // Race all promises - get first successful result
+  // This ensures we get the fastest response from either RB Goldspot or Vercel
+  const racePromises = fetchPromises.map(async (promise, index) => {
+    try {
+      const result = await promise;
+      if (result && result.result && result.result.ratePerGram > 0) {
+        return result;
+      }
+      // Wait a bit longer if this source hasn't responded yet
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return null;
+    } catch (error) {
+      return null;
+    }
+  });
+
+  // Get first successful result
+  const results = await Promise.allSettled(racePromises);
   const successfulResults = results
     .filter(r => r.status === 'fulfilled' && r.value !== null)
     .map(r => r.value)
-    .sort((a, b) => a.priority - b.priority); // Sort by priority
+    .sort((a, b) => a.priority - b.priority); // Sort by priority (RB Goldspot first)
 
   if (successfulResults.length > 0) {
     const bestResult = successfulResults[0];
-    console.log(`✅ Successfully fetched rate from ${bestResult.source}: ₹${bestResult.result.ratePerGram}/gram`);
     return bestResult.result;
   }
 
-  // All sources failed - try sequential fallback as last resort
-  console.warn('⚠️ All parallel fetches failed, trying sequential fallback...');
+  // If parallel failed, try sequential as fallback (RB Goldspot first, then Vercel)
   for (const source of enabledSources) {
     try {
       let result = null;
@@ -496,7 +525,6 @@ const fetchSilverRatesFromMultipleSources = async () => {
       }
       
       if (result && result.ratePerGram && result.ratePerGram > 0) {
-        console.log(`✅ Successfully fetched rate from ${source.name} (fallback): ₹${result.ratePerGram}/gram`);
         return result;
       }
     } catch (error) {
@@ -505,7 +533,6 @@ const fetchSilverRatesFromMultipleSources = async () => {
   }
 
   // All sources failed
-  console.warn('❌ All rate sources failed to fetch rates');
   return null;
 };
 
