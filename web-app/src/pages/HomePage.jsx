@@ -13,6 +13,7 @@ import {
 import { TrendingUp, TrendingDown, Remove } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthContext';
 import api from '../config/api';
+import axios from 'axios';
 import colors from '../theme/colors';
 import PromotionalBanner from '../components/PromotionalBanner';
 import SidePromotionalBanner from '../components/SidePromotionalBanner';
@@ -26,11 +27,18 @@ function HomePage() {
   const [lastUpdateTime, setLastUpdateTime] = useState(null);
   const [previousRates, setPreviousRates] = useState({});
   const pollingIntervalRef = React.useRef(null);
+  const currentRequestRef = React.useRef(null);
 
   useEffect(() => {
     fetchRates();
     startPolling();
-    return () => stopPolling();
+    return () => {
+      stopPolling();
+      // Cancel any pending request
+      if (currentRequestRef.current) {
+        currentRequestRef.current.cancel?.();
+      }
+    };
   }, []);
 
   const startPolling = () => {
@@ -51,12 +59,25 @@ function HomePage() {
   };
 
   const pollRates = async () => {
+    // Cancel previous request if still pending
+    if (currentRequestRef.current) {
+      currentRequestRef.current.cancel?.();
+    }
+
     try {
+      // Create cancelable request
+      const CancelToken = axios.CancelToken;
+      const source = CancelToken.source();
+      currentRequestRef.current = source;
+
       // Add cache-busting timestamp to ensure fresh data every second
       const response = await api.get('/rates', { 
-        timeout: 8000, // 8 seconds timeout for faster updates
-        params: { _t: Date.now() } // Cache busting - ensures fresh data (timestamp in URL)
+        timeout: 5000, // Reduced to 5 seconds for faster updates
+        params: { _t: Date.now() }, // Cache busting - ensures fresh data (timestamp in URL)
+        cancelToken: source.token
       });
+      
+      currentRequestRef.current = null; // Clear after success
       const newRates = response.data;
       const updateTime = new Date();
 
@@ -124,6 +145,11 @@ function HomePage() {
         console.warn('No rates received from API');
       }
     } catch (error) {
+      // Ignore canceled requests (they're expected when new request starts)
+      if (axios.isCancel(error)) {
+        return; // Silently ignore canceled requests
+      }
+      
       // Only log timeout errors occasionally to avoid spam
       if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
         if (Math.random() < 0.05) { // Log only 5% of timeout errors
@@ -137,6 +163,8 @@ function HomePage() {
       }
       // Don't stop polling on error - continue trying
       // Keep existing rates if available
+    } finally {
+      currentRequestRef.current = null; // Clear ref after request completes
     }
   };
 

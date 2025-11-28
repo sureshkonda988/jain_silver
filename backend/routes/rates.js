@@ -43,20 +43,20 @@ router.get('/', async (req, res) => {
       allRates = []; // Empty array if DB fails
     }
     
-    // Fetch live rates EVERY SECOND - always fetch fresh data (non-blocking)
+    // Fetch live rates EVERY SECOND - always fetch fresh data (non-blocking, fast timeout)
     let liveRate = null;
     try {
       const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
       
-      // Fetch with timeout - don't wait too long
+      // Fetch with aggressive timeout - return cached rates quickly if live fetch is slow
       liveRate = await Promise.race([
         fetchSilverRatesFromMultipleSources(),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout')), 5000)
+          setTimeout(() => reject(new Error('Timeout')), 3000) // Reduced to 3 seconds
         )
       ]);
     } catch (fetchError) {
-      // Fetch failed - use cached rates
+      // Fetch failed or timed out - use cached rates (this is fine, happens frequently)
       liveRate = null;
     }
     
