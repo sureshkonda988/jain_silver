@@ -49,7 +49,7 @@ router.get('/', async (req, res) => {
       allRates = []; // Empty array if DB fails
     }
     
-    // Fetch live rates EVERY SECOND - ALWAYS fetch fresh data from both sources
+    // Fetch live rates EVERY SECOND - ONLY return LIVE rates, NO cached rates
     let liveRate = null;
     try {
       const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
@@ -59,90 +59,77 @@ router.get('/', async (req, res) => {
       liveRate = await Promise.race([
         fetchSilverRatesFromMultipleSources(),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout')), 4000) // 4 seconds - enough time for both sources
+          setTimeout(() => reject(new Error('Timeout')), 5000) // 5 seconds - enough time for both sources
         )
       ]);
     } catch (fetchError) {
-      // If fetch fails, log occasionally but continue with cached rates
-      // This ensures we always return something, but we should try to get live data
-      if (Math.random() < 0.05) { // Log 5% of failures to avoid spam
-        console.warn('⚠️ Live rate fetch failed, using cached rates:', fetchError.message);
-      }
-      liveRate = null;
+      // Live fetch failed - log error and return empty array (NO cached rates)
+      console.error('❌ Live rate fetch failed:', fetchError.message);
+      return res.json([]); // Return empty array - NO cached rates
+    }
+    
+    // ONLY proceed if we have a valid live rate
+    if (!liveRate || !liveRate.ratePerGram || liveRate.ratePerGram <= 0) {
+      console.warn('⚠️ Invalid live rate received, returning empty array');
+      return res.json([]); // Return empty array - NO cached rates
     }
     
     const currentTime = new Date();
+    const baseRatePerGram = liveRate.ratePerGram;
     
-    // ALWAYS update rates - even if live fetch failed, update timestamps
-    // This ensures frontend sees updates every second
-    if (liveRate && liveRate.ratePerGram && liveRate.ratePerGram > 0) {
-      const baseRatePerGram = liveRate.ratePerGram;
+    // Update rates in memory immediately with LIVE data ONLY
+    allRates = allRates.map(rate => {
+      if (!rate.weight || !rate.weight.value) {
+        // Skip rates without weight
+        return null;
+      }
       
-      // Update rates in memory immediately with LIVE data (for fast response)
-      allRates = allRates.map(rate => {
-        if (!rate.weight || !rate.weight.value) {
-          // Still update timestamp even if weight is missing
-          return {
-            ...rate,
-            lastUpdated: currentTime
-          };
-        }
-        
-        // Calculate rate per gram based on purity
-        let ratePerGram = baseRatePerGram;
-        if (rate.purity === '92.5%') {
-          ratePerGram = baseRatePerGram * 0.96;
-        } else if (rate.purity === '99.99%') {
-          ratePerGram = baseRatePerGram * 1.005;
-        }
-        
-        // Apply manual adjustment
-        const manualAdjustment = (rate.manualAdjustment !== undefined && rate.manualAdjustment !== null) ? rate.manualAdjustment : 0;
-        ratePerGram = ratePerGram + manualAdjustment;
-        ratePerGram = Math.max(0, Math.round(ratePerGram * 100) / 100);
-        
-        // Calculate total rate
-        let weightInGrams = rate.weight.value;
-        if (rate.weight.unit === 'kg') {
-          weightInGrams = rate.weight.value * 1000;
-        } else if (rate.weight.unit === 'oz') {
-          weightInGrams = rate.weight.value * 28.35;
-        }
-        
-        const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
-        
-        // Return updated rate object with fresh timestamp and LIVE rate
-        return {
-          ...rate,
-          ratePerGram: ratePerGram, // LIVE rate from RB Goldspot/Vercel
-          rate: totalRate, // LIVE total rate
-          lastUpdated: currentTime, // ALWAYS fresh timestamp
-          usdInrRate: liveRate.usdInrRate || rate.usdInrRate,
-          source: liveRate.source || 'cache' // Track data source
-        };
-      });
+      // Calculate rate per gram based on purity
+      let ratePerGram = baseRatePerGram;
+      if (rate.purity === '92.5%') {
+        ratePerGram = baseRatePerGram * 0.96;
+      } else if (rate.purity === '99.99%') {
+        ratePerGram = baseRatePerGram * 1.005;
+      }
       
-      // Update database asynchronously (don't block response)
-      Promise.all(
-        allRates.map(rate => 
-          SilverRate.findByIdAndUpdate(rate._id, {
-            ratePerGram: rate.ratePerGram,
-            rate: rate.rate,
-            lastUpdated: rate.lastUpdated
-          }).catch(() => {})
-        )
-      ).catch(() => {});
-    } else {
-      // Even if no live rate fetched, update timestamps to show we're checking
-      // This ensures frontend sees activity every second
-      allRates = allRates.map(rate => ({
+      // Apply manual adjustment
+      const manualAdjustment = (rate.manualAdjustment !== undefined && rate.manualAdjustment !== null) ? rate.manualAdjustment : 0;
+      ratePerGram = ratePerGram + manualAdjustment;
+      ratePerGram = Math.max(0, Math.round(ratePerGram * 100) / 100);
+      
+      // Calculate total rate
+      let weightInGrams = rate.weight.value;
+      if (rate.weight.unit === 'kg') {
+        weightInGrams = rate.weight.value * 1000;
+      } else if (rate.weight.unit === 'oz') {
+        weightInGrams = rate.weight.value * 28.35;
+      }
+      
+      const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
+      
+      // Return updated rate object with LIVE rate ONLY
+      return {
         ...rate,
-        lastUpdated: currentTime, // Update timestamp even for cached rates
-        source: 'cache' // Indicate this is cached data
-      }));
-    }
+        ratePerGram: ratePerGram, // LIVE rate from RB Goldspot/Vercel
+        rate: totalRate, // LIVE total rate
+        lastUpdated: currentTime, // ALWAYS fresh timestamp
+        usdInrRate: liveRate.usdInrRate || rate.usdInrRate,
+        source: liveRate.source || 'live' // Track data source
+      };
+    }).filter(rate => rate !== null); // Remove null entries
     
-    // Always return rates with fresh timestamps (even if empty or cached)
+    // Update database asynchronously (don't block response)
+    Promise.all(
+      allRates.map(rate => 
+        SilverRate.findByIdAndUpdate(rate._id, {
+          ratePerGram: rate.ratePerGram,
+          rate: rate.rate,
+          lastUpdated: rate.lastUpdated
+        }).catch(() => {})
+      )
+    ).catch(() => {});
+    
+    // Return ONLY live rates
     return res.json(allRates || []);
     
   } catch (error) {

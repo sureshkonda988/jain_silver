@@ -97,9 +97,9 @@ function HomePage() {
 
             const rateKey = newRate._id?.toString() || `${newRate.name}-${newRate.weight?.value}`;
 
-            // Check if rate changed (use smaller threshold for more sensitive updates)
+            // ALWAYS show rate changes - no threshold, show every update
             if (prevRate) {
-              const rateChanged = Math.abs((prevRate.ratePerGram || 0) - (newRate.ratePerGram || 0)) > 0.0001;
+              const rateChanged = Math.abs((prevRate.ratePerGram || 0) - (newRate.ratePerGram || 0)) > 0;
 
               if (rateChanged) {
                 setPreviousRates((prev) => ({
@@ -119,6 +119,14 @@ function HomePage() {
                     return newPrev;
                   });
                 }, 1500);
+              } else {
+                // Rate is stable - still update timestamp but don't show change indicator
+                // Remove any existing change indicator for stable rates
+                setPreviousRates((prev) => {
+                  const newPrev = { ...prev };
+                  delete newPrev[rateKey];
+                  return newPrev;
+                });
               }
             } else {
               // New rate, show as updated
