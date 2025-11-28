@@ -706,8 +706,29 @@ router.post('/signin',
   ],
   async (req, res) => {
     try {
+      // Check MongoDB connection
+      const mongoose = require('mongoose');
+      if (mongoose.connection.readyState !== 1) {
+        console.log('⚠️ MongoDB not connected, attempting connection...');
+        try {
+          await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/jain_silver', {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+            serverSelectionTimeoutMS: 5000,
+          });
+          console.log('✅ MongoDB connected for signin');
+        } catch (connError) {
+          console.error('❌ MongoDB connection failed:', connError.message);
+          return res.status(503).json({ 
+            message: 'Database connection failed', 
+            error: 'Please try again later' 
+          });
+        }
+      }
+
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        console.error('❌ Validation errors:', errors.array());
         return res.status(400).json({ errors: errors.array() });
       }
 
@@ -717,25 +738,32 @@ router.post('/signin',
         return res.status(400).json({ message: 'Email or phone is required' });
       }
 
+      console.log('🔐 Sign in attempt:', { email: email || undefined, phone: phone || undefined });
+
       // Find user
       const user = await User.findOne(
-        email ? { email: email.toLowerCase() } : { phone }
+        email ? { email: email.toLowerCase().trim() } : { phone: phone.trim() }
       );
 
       if (!user) {
+        console.error('❌ User not found:', { email: email || undefined, phone: phone || undefined });
         return res.status(401).json({ message: 'Invalid credentials' });
       }
+
+      console.log('✅ User found:', { id: user._id, email: user.email, status: user.status, isVerified: user.isVerified });
 
       // Check password
       const isPasswordValid = await user.comparePassword(password);
       if (!isPasswordValid) {
+        console.error('❌ Invalid password for user:', user.email);
         return res.status(401).json({ message: 'Invalid credentials' });
       }
 
-      // Check if user is approved
-      if (user.status !== 'approved') {
+      // Allow verified users to sign in even if pending (they can check status)
+      // But reject users with rejected status
+      if (user.status === 'rejected') {
         return res.status(403).json({ 
-          message: `Account is ${user.status}. Please wait for admin approval.`,
+          message: 'Account has been rejected. Please contact admin.',
           status: user.status
         });
       }
@@ -743,20 +771,37 @@ router.post('/signin',
       // Generate token
       const token = generateToken(user._id);
 
+      // If user is pending, include a warning message
+      const responseMessage = user.status === 'approved' 
+        ? 'Sign in successful' 
+        : `Sign in successful. Your account is ${user.status}. Please wait for admin approval.`;
+
+      console.log('✅ Sign in successful:', { email: user.email, status: user.status });
+
       res.json({
-        message: 'Sign in successful',
+        message: responseMessage,
         token,
         user: {
           id: user._id,
           name: user.name,
           email: user.email,
           phone: user.phone,
-          role: user.role
-        }
+          role: user.role,
+          status: user.status,
+          isVerified: user.isVerified
+        },
+        ...(user.status !== 'approved' && { 
+          warning: `Your account is ${user.status}. Some features may be limited until admin approval.` 
+        })
       });
     } catch (error) {
-      console.error('Sign in error:', error);
-      res.status(500).json({ message: 'Server error', error: error.message });
+      console.error('❌ Sign in error:', error);
+      console.error('Error stack:', error.stack);
+      res.status(500).json({ 
+        message: 'Server error', 
+        error: error.message,
+        ...(process.env.NODE_ENV === 'development' ? { stack: error.stack } : {})
+      });
     }
   }
 );
