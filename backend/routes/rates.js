@@ -23,27 +23,59 @@ router.get('/', async (req, res) => {
     
     // Fetch live rates EVERY SECOND - ONLY return LIVE rates from endpoints
     let liveRate = null;
+    let fetchError = null;
     try {
       const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
+      
+      console.log('📡 Starting live rate fetch from endpoints...');
       
       // Fetch with timeout - MUST get live data every second
       // Both RB Goldspot and Vercel sources are tried in parallel
       liveRate = await Promise.race([
         fetchSilverRatesFromMultipleSources(),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout')), 5000) // 5 seconds - enough time for both sources
+          setTimeout(() => reject(new Error('Timeout after 8 seconds')), 8000) // 8 seconds - more time for both sources
         )
       ]);
-    } catch (fetchError) {
-      // Live fetch failed - log error and return empty array (NO cached rates)
-      console.error('❌ Live rate fetch failed:', fetchError.message);
-      return res.json([]); // Return empty array - NO cached rates
+      
+      // Log successful fetch
+      if (liveRate && liveRate.ratePerGram) {
+        console.log(`✅ Successfully fetched live rate: ₹${liveRate.ratePerGram}/gram from ${liveRate.source || 'unknown'}`);
+      } else {
+        console.warn('⚠️ Fetch returned but rate is invalid:', liveRate);
+      }
+    } catch (error) {
+      // Live fetch failed - log detailed error
+      fetchError = error;
+      console.error('❌ Live rate fetch failed:', error.message);
+      console.error('  Error stack:', error.stack?.substring(0, 500));
+      if (error.code) {
+        console.error('  Error code:', error.code);
+      }
     }
     
     // ONLY proceed if we have a valid live rate
     if (!liveRate || !liveRate.ratePerGram || liveRate.ratePerGram <= 0) {
-      console.warn('⚠️ Invalid live rate received, returning empty array');
-      return res.json([]); // Return empty array - NO cached rates
+      const errorDetails = {
+        liveRate: liveRate ? {
+          ratePerGram: liveRate.ratePerGram,
+          source: liveRate.source,
+          hasRatePerGram: !!liveRate.ratePerGram,
+          ratePerKg: liveRate.ratePerKg
+        } : 'null',
+        error: fetchError?.message || 'Invalid rate received',
+        timestamp: new Date().toISOString()
+      };
+      console.warn('⚠️ Invalid live rate received:', errorDetails);
+      
+      // Return error details in response for debugging
+      return res.status(503).json({ 
+        error: 'Live rate fetch failed',
+        message: fetchError?.message || 'Invalid rate received',
+        details: 'Unable to fetch rates from RB Goldspot or Vercel endpoints. Please try again.',
+        debug: errorDetails,
+        timestamp: new Date().toISOString()
+      });
     }
     
     const currentTime = new Date();
