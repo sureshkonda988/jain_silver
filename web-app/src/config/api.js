@@ -14,8 +14,11 @@ const api = axios.create({
 
 api.interceptors.request.use(
   async (config) => {
-    if (config.url && (config.url.includes('/rates') || config.url === '/rates')) {
-      config.timeout = 10000;
+    // Don't override timeout if explicitly set in the request
+    if (!config.timeout) {
+      if (config.url && (config.url.includes('/rates') || config.url === '/rates')) {
+        config.timeout = 15000; // Increased from 10s to 15s for rates
+      }
     }
     
     const token = localStorage.getItem('token');

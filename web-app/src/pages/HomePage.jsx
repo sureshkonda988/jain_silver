@@ -54,8 +54,9 @@ function HomePage() {
     try {
       // Add cache-busting timestamp to ensure fresh data
       const response = await api.get('/rates', { 
-        timeout: 10000,
-        params: { _t: Date.now() } // Cache busting
+        timeout: 15000, // Increased timeout to 15 seconds
+        params: { _t: Date.now() }, // Cache busting
+        signal: AbortSignal.timeout(15000) // Additional timeout protection
       });
       const newRates = response.data;
       const updateTime = new Date();
@@ -124,23 +125,33 @@ function HomePage() {
         console.warn('No rates received from API');
       }
     } catch (error) {
-      // Log error occasionally to avoid spam
-      if (Math.random() < 0.1) {
-        console.warn('Polling error:', error.message, error.response?.status);
+      // Only log timeout errors occasionally to avoid spam
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        if (Math.random() < 0.05) { // Log only 5% of timeout errors
+          console.warn('Polling timeout (this is normal if rates API is slow)');
+        }
+      } else if (error.response?.status !== 503) {
+        // Log other errors (but not 503 which is expected when API is unavailable)
+        if (Math.random() < 0.1) {
+          console.warn('Polling error:', error.message, error.response?.status);
+        }
       }
       // Don't stop polling on error - continue trying
+      // Keep existing rates if available
     }
   };
 
   const fetchRates = async () => {
     try {
-      const response = await api.get('/rates');
+      const response = await api.get('/rates', { timeout: 20000 }); // 20 second timeout for initial load
       if (response.data && Array.isArray(response.data)) {
         setRates(response.data);
         setLastUpdateTime(new Date());
       }
     } catch (error) {
-      console.error('Error fetching rates:', error);
+      console.error('Error fetching rates:', error.message || error);
+      // Don't show error to user, just keep loading state
+      // Rates will be fetched by polling
     } finally {
       setLoading(false);
     }
