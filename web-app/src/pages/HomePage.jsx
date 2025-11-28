@@ -133,9 +133,10 @@ function HomePage() {
               }));
             }
 
+            // Always use current time for lastUpdated to show live updates
             return {
               ...newRate,
-              lastUpdated: newRate.lastUpdated || updateTime,
+              lastUpdated: updateTime, // Always use current time, not server time
             };
           });
           

@@ -38,6 +38,12 @@ router.get('/', async (req, res) => {
     // Get rates from MongoDB first (always return something)
     try {
       allRates = await SilverRate.find({ location: 'Andhra Pradesh' }).sort({ type: 1, 'weight.value': 1 }).lean();
+      
+      // Ensure all rates have required fields
+      allRates = allRates.map(rate => ({
+        ...rate,
+        lastUpdated: rate.lastUpdated || new Date() // Ensure timestamp exists
+      }));
     } catch (dbError) {
       console.error('Error fetching rates from DB:', dbError.message);
       allRates = []; // Empty array if DB fails
@@ -61,13 +67,21 @@ router.get('/', async (req, res) => {
       liveRate = null;
     }
     
+    const currentTime = new Date();
+    
     // If we have a live rate, update all rates in memory
     if (liveRate && liveRate.ratePerGram && liveRate.ratePerGram > 0) {
       const baseRatePerGram = liveRate.ratePerGram;
       
       // Update rates in memory immediately (for fast response)
       allRates = allRates.map(rate => {
-        if (!rate.weight || !rate.weight.value) return rate;
+        if (!rate.weight || !rate.weight.value) {
+          // Still update timestamp even if weight is missing
+          return {
+            ...rate,
+            lastUpdated: currentTime
+          };
+        }
         
         // Calculate rate per gram based on purity
         let ratePerGram = baseRatePerGram;
@@ -92,12 +106,12 @@ router.get('/', async (req, res) => {
         
         const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
         
-        // Return updated rate object
+        // Return updated rate object with fresh timestamp
         return {
           ...rate,
           ratePerGram: ratePerGram,
           rate: totalRate,
-          lastUpdated: new Date(),
+          lastUpdated: currentTime, // Always fresh timestamp
           usdInrRate: liveRate.usdInrRate || rate.usdInrRate
         };
       });
@@ -112,9 +126,15 @@ router.get('/', async (req, res) => {
           }).catch(() => {})
         )
       ).catch(() => {});
+    } else {
+      // Even if no live rate, update timestamps to show we're checking
+      allRates = allRates.map(rate => ({
+        ...rate,
+        lastUpdated: currentTime // Update timestamp even for cached rates
+      }));
     }
     
-    // Always return rates (even if empty or cached)
+    // Always return rates with fresh timestamps (even if empty or cached)
     return res.json(allRates || []);
     
   } catch (error) {
