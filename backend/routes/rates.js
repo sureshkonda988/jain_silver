@@ -387,6 +387,8 @@ router.post('/initialize', async (req, res) => {
   }
 });
 
-// Export manualAdjustments so admin.js can modify them
+// Export manualAdjustments and cachedBaseRate so server.js can access them
 module.exports = router;
 module.exports.manualAdjustments = manualAdjustments;
+module.exports.cachedBaseRate = cachedBaseRate;
+module.exports.updateRatesFromEndpoints = updateRatesFromEndpoints;

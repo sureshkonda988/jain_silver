@@ -494,18 +494,42 @@ mongoose.connection.once('open', async () => {
       console.error('❌ Error initializing store info:', storeError.message || storeError);
     }
     
-    // Start background rate updater (works on all platforms including Vercel)
-    console.log('🔄 Starting background rate updater...');
+    // Initialize rates cache from MongoDB
+    console.log('💰 Loading rates from MongoDB...');
+    try {
+      const SilverRate = require('./models/SilverRate');
+      const lastRate = await SilverRate.findOne({ location: 'Andhra Pradesh' }).sort({ lastUpdated: -1 });
+      if (lastRate && lastRate.ratePerGram) {
+        const ratesRouter = require('./routes/rates');
+        // Access the cachedBaseRate through the module
+        if (ratesRouter.cachedBaseRate !== undefined) {
+          ratesRouter.cachedBaseRate = {
+            ratePerGram: lastRate.ratePerGram,
+            ratePerKg: lastRate.ratePerGram * 1000,
+            source: 'mongodb',
+            lastUpdated: lastRate.lastUpdated || new Date(),
+            usdInrRate: 89.25
+          };
+          console.log(`✅ Loaded rate from MongoDB: ₹${lastRate.ratePerGram}/gram`);
+        }
+      } else {
+        console.log('⚠️ No rates found in MongoDB, will fetch from endpoints');
+      }
+    } catch (rateLoadError) {
+      console.error('❌ Error loading rates from MongoDB:', rateLoadError.message);
+    }
+    
+    // Trigger immediate rate update on server start
+    console.log('🔄 Triggering initial rate fetch...');
     try {
       const ratesRouter = require('./routes/rates');
-      if (ratesRouter.startBackgroundRateUpdater) {
-        ratesRouter.startBackgroundRateUpdater();
-        console.log('✅ Background rate updater started (updates every second)');
-      } else {
-        console.log('⚠️  Background rate updater not available');
+      if (ratesRouter.updateRatesFromEndpoints) {
+        ratesRouter.updateRatesFromEndpoints().catch((err) => {
+          console.error('❌ Initial rate fetch failed:', err.message);
+        });
       }
     } catch (updaterError) {
-      console.error('❌ Error starting background rate updater:', updaterError.message || updaterError);
+      console.error('❌ Error triggering initial rate fetch:', updaterError.message || updaterError);
     }
     
     // Start rate updater (only if enabled for platform - legacy)
