@@ -462,7 +462,7 @@ const fetchSilverRatesFromMultipleSources = async () => {
   }
 
   // Try sources in parallel - return first successful result (fastest)
-  // Use Promise.race to get the fastest successful response
+  // Create promises for each source
   const fetchPromises = enabledSources.map(async (source) => {
     try {
       let result = null;
@@ -484,26 +484,10 @@ const fetchSilverRatesFromMultipleSources = async () => {
     }
   });
 
-  // Race all promises - get first successful result
-  // This ensures we get the fastest response from either RB Goldspot or Vercel
-  const racePromises = fetchPromises.map(async (promise, index) => {
-    try {
-      const result = await promise;
-      if (result && result.result && result.result.ratePerGram > 0) {
-        return result;
-      }
-      // Wait a bit longer if this source hasn't responded yet
-      await new Promise(resolve => setTimeout(resolve, 100));
-      return null;
-    } catch (error) {
-      return null;
-    }
-  });
-
-  // Get first successful result
-  const results = await Promise.allSettled(racePromises);
+  // Use Promise.allSettled to wait for all, then pick best result by priority
+  const results = await Promise.allSettled(fetchPromises);
   const successfulResults = results
-    .filter(r => r.status === 'fulfilled' && r.value !== null)
+    .filter(r => r.status === 'fulfilled' && r.value !== null && r.value.result)
     .map(r => r.value)
     .sort((a, b) => a.priority - b.priority); // Sort by priority (RB Goldspot first)
 
