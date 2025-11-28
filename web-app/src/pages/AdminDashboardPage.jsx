@@ -25,12 +25,17 @@ function AdminDashboardPage() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const [pendingResponse, allResponse] = await Promise.all([
-        api.get('/admin/pending-users'),
-        api.get('/admin/users'),
-      ]);
+      const pendingResponse = await api.get('/admin/pending-users');
       setPendingUsers(pendingResponse.data || []);
-      setAllUsers(allResponse.data || []);
+      
+      // Try to fetch all users, but don't fail if endpoint doesn't exist
+      try {
+        const allResponse = await api.get('/admin/users');
+        setAllUsers(allResponse.data || []);
+      } catch (allUsersError) {
+        console.warn('All users endpoint not available, using pending users only');
+        setAllUsers(pendingResponse.data || []);
+      }
     } catch (error) {
       console.error('Error fetching users:', error);
       alert('Failed to fetch users. Please try again.');
