@@ -1,0 +1,86 @@
+/* Minimal CSS to style header and hero to match provided mock
+   Focus: compact top navigation, left brand, large hero headline and spacing
+*/
+
+:root{
+  --page-max-width:1200px;
+  --header-height:86px;
+  --brand-font: 'Georgia', 'Times New Roman', serif;
+  --body-font: 'Helvetica Neue', Arial, sans-serif;
+  --muted:#777;
+  --accent:#000;
+  --container-padding:24px;
+}
+
+html,body{height:100%;margin:0;padding:0;font-family:var(--body-font);color:#222;background:#fafafa}
+.container{max-width:var(--page-max-width);margin:0 auto;padding:0 24px}
+
+/* Header */
+.site-header{
+  height:var(--header-height);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  background:#fff;
+  border-bottom:1px solid #eee;
+  position:relative;
+  z-index:50;
+}
+.site-header .brand{
+  font-family:var(--brand-font);
+  font-size:18px;
+  letter-spacing:0.6px;
+  color:#111;
+  margin-left:12px;
+}
+
+.site-header .nav{
+  display:flex;gap:18px;align-items:center;margin-right:12px;font-size:14px;color:var(--muted)
+}
+.site-header .nav a{color:var(--muted);text-decoration:none}
+.site-header .nav a:hover{color:var(--accent)}
+
+/* Hero section */
+.hero{
+  display:flex;
+  gap:32px;
+  align-items:flex-start;
+  padding:56px 24px 48px 24px;
+  background:transparent;
+}
+.hero .left{
+  flex:1 1 48%;
+  padding-left:12px;
+}
+.hero .right{
+  flex:1 1 48%;
+  display:flex;align-items:center;justify-content:center;padding-right:12px
+}
+.hero h1{
+  font-family:var(--brand-font);
+  font-size:56px;
+  line-height:1.02;
+  margin:0 0 18px 0;
+  color:#111;
+}
+.hero p.lead{font-size:16px;color:var(--muted);max-width:540px}
+.hero .cta{display:inline-block;padding:10px 16px;background:#111;color:#fff;text-decoration:none;margin-top:18px;font-size:13px}
+
+/* Best Selling grid */
+.section-title{font-family:var(--brand-font);font-size:24px;margin:36px 0 18px 0}
+.products-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.product-card{background:#fff;padding:18px;border:1px solid #eee}
+.product-card img{max-width:100%;display:block}
+
+/* Small screens */
+@media (max-width:900px){
+  .hero{flex-direction:column;padding:32px}
+  .hero h1{font-size:36px}
+  .products-grid{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:480px){
+  .products-grid{grid-template-columns:1fr}
+  .site-header{padding:0 12px}
+  .site-header .nav{display:none}
+  .hero h1{font-size:28px}
+}

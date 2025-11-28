@@ -28,7 +28,7 @@ const updateRates = async (io) => {
       return; // Exit early, don't update rates
     }
     
-    const baseRatePerGram = liveRate.ratePerGram;
+  const baseRatePerGram = liveRate.ratePerGram;
     
     // Log every fetch to verify it's working (can reduce later)
     console.log(`✅ Fetched live rate: ₹${liveRate.ratePerGram}/gram (₹${liveRate.ratePerKg}/kg, source: ${liveRate.source})`);
@@ -41,8 +41,8 @@ const updateRates = async (io) => {
         continue;
       }
 
-      // Calculate rate per gram based on purity
-      let ratePerGram = baseRatePerGram;
+  // Calculate rate per gram based on purity
+  let ratePerGram = baseRatePerGram;
       
       // Adjust for different purity levels
       if (rate.purity === '92.5%') {
@@ -54,7 +54,9 @@ const updateRates = async (io) => {
       }
       // 99.9% uses base rate as-is
       
-      rate.ratePerGram = Math.round(ratePerGram * 100) / 100;
+  // Apply manual per-gram adjustment set by admin (can be negative)
+  const manualAdj = (typeof rate.manualAdjustment === 'number') ? rate.manualAdjustment : 0;
+  rate.ratePerGram = Math.round((ratePerGram + manualAdj) * 100) / 100;
       
       // Calculate total rate based on weight
       let weightInGrams = rate.weight.value;

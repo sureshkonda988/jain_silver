@@ -45,7 +45,7 @@ mongodb+srv://username:password@cluster.mongodb.net/jain_silver?retryWrites=true
 After whitelisting:
 1. Wait 2-3 minutes for changes to propagate
 2. Check Vercel logs - should see "MongoDB Connected"
-3. Test endpoint: `https://jain-silver.vercel.app/api/auth`
+3. Test endpoint: `https://jain-silver.vercel.     app/api/auth`
 
 ### Security Note
 

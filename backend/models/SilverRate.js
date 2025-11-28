@@ -36,6 +36,12 @@ const silverRateSchema = new mongoose.Schema({
     required: true,
     min: 0
   },
+  // Manual per-gram adjustment (can be negative). Admin can set this to apply
+  // a fixed rupee adjustment per gram (e.g. -100 will subtract ₹100/gram).
+  manualAdjustment: {
+    type: Number,
+    default: 0
+  },
   location: {
     type: String,
     default: 'Andhra Pradesh',
