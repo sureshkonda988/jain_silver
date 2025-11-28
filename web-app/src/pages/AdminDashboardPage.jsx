@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Card, CardContent, Typography, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Alert, Dialog, DialogTitle, DialogContent, DialogActions, TextField } from '@mui/material';
-import { Logout, CheckCircle, Cancel, Visibility } from '@mui/icons-material';
+import { Box, Card, CardContent, Typography, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Alert, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Tabs, Tab, CircularProgress } from '@mui/material';
+import { Logout, CheckCircle, Cancel, Visibility, Remove, Add } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthContext';
 import api from '../config/api';
 import colors from '../theme/colors';
@@ -9,11 +9,14 @@ import colors from '../theme/colors';
 function AdminDashboardPage() {
   const navigate = useNavigate();
   const { user, logout } = useContext(AuthContext);
-  const [users, setUsers] = useState([]);
+  const [pendingUsers, setPendingUsers] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('pending');
+  const [activeTab, setActiveTab] = useState(0);
   const [adjustDialogOpen, setAdjustDialogOpen] = useState(false);
   const [adjustAmount, setAdjustAmount] = useState('');
+  const [adjustType, setAdjustType] = useState('increase'); // 'increase' or 'decrease'
+  const [loadingAction, setLoadingAction] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -21,10 +24,16 @@ function AdminDashboardPage() {
 
   const fetchUsers = async () => {
     try {
-      const response = await api.get('/admin/pending-users');
-      setUsers(response.data);
+      setLoading(true);
+      const [pendingResponse, allResponse] = await Promise.all([
+        api.get('/admin/pending-users'),
+        api.get('/admin/users'),
+      ]);
+      setPendingUsers(pendingResponse.data || []);
+      setAllUsers(allResponse.data || []);
     } catch (error) {
       console.error('Error fetching users:', error);
+      alert('Failed to fetch users. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -32,39 +41,53 @@ function AdminDashboardPage() {
 
   const handleApprove = async (userId) => {
     try {
+      setLoadingAction(true);
       await api.put(`/admin/approve-user/${userId}`);
-      fetchUsers();
+      await fetchUsers();
       alert('User approved successfully');
     } catch (error) {
-      alert('Failed to approve user');
+      alert(error.response?.data?.message || 'Failed to approve user');
+    } finally {
+      setLoadingAction(false);
     }
   };
 
   const handleReject = async (userId) => {
     if (window.confirm('Are you sure you want to reject this user?')) {
       try {
+        setLoadingAction(true);
         await api.put(`/admin/reject-user/${userId}`, { reason: 'Rejected by admin' });
-        fetchUsers();
+        await fetchUsers();
         alert('User rejected successfully');
       } catch (error) {
-        alert('Failed to reject user');
+        alert(error.response?.data?.message || 'Failed to reject user');
+      } finally {
+        setLoadingAction(false);
       }
     }
   };
 
+  const handleViewDocuments = (userId) => {
+    navigate(`/admin/users/${userId}/documents`);
+  };
+
   const handleAdjustRates = async () => {
     const amount = parseFloat(adjustAmount);
-    if (isNaN(amount)) {
-      alert('Please enter a valid number');
+    if (isNaN(amount) || amount <= 0) {
+      alert('Please enter a valid positive number');
       return;
     }
     try {
-      await api.post('/admin/adjust-rates', { amount });
-      alert('Rates adjusted successfully');
+      setLoadingAction(true);
+      const finalAmount = adjustType === 'decrease' ? -Math.abs(amount) : amount;
+      await api.post('/admin/adjust-rates', { amount: finalAmount });
+      alert(`Rates ${adjustType === 'decrease' ? 'decreased' : 'increased'} by ₹${amount}/gram successfully`);
       setAdjustDialogOpen(false);
       setAdjustAmount('');
     } catch (error) {
-      alert('Failed to adjust rates');
+      alert(error.response?.data?.message || 'Failed to adjust rates');
+    } finally {
+      setLoadingAction(false);
     }
   };
 
@@ -73,8 +96,10 @@ function AdminDashboardPage() {
     navigate('/admin/login');
   };
 
+  const usersToShow = activeTab === 0 ? pendingUsers : allUsers;
+
   return (
-    <Box sx={{ p: 3, maxWidth: 1200, mx: 'auto' }}>
+    <Box sx={{ p: 3, maxWidth: 1400, mx: 'auto' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4" sx={{ fontWeight: 700 }}>
           Admin Dashboard
@@ -84,73 +109,159 @@ function AdminDashboardPage() {
         </Button>
       </Box>
 
+      {/* Rate Adjustment Card */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>Rate Adjustment</Typography>
-          <Button variant="contained" onClick={() => setAdjustDialogOpen(true)}>
-            Adjust Rates
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent>
-          <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-            <Button variant={activeTab === 'pending' ? 'contained' : 'outlined'} onClick={() => setActiveTab('pending')}>
-              Pending Users
+          <Typography variant="h6" sx={{ mb: 2, fontWeight: 700 }}>Rate Adjustment</Typography>
+          <Typography variant="body2" sx={{ mb: 2, color: colors.textSecondary }}>
+            Adjust silver rates per gram. Enter positive amount to increase or decrease rates.
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Button
+              variant="contained"
+              color="error"
+              startIcon={<Remove />}
+              onClick={() => {
+                setAdjustType('decrease');
+                setAdjustDialogOpen(true);
+              }}
+              disabled={loadingAction}
+            >
+              Decrease Rates
+            </Button>
+            <Button
+              variant="contained"
+              color="success"
+              startIcon={<Add />}
+              onClick={() => {
+                setAdjustType('increase');
+                setAdjustDialogOpen(true);
+              }}
+              disabled={loadingAction}
+            >
+              Increase Rates
             </Button>
           </Box>
-          <TableContainer component={Paper}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Email</TableCell>
-                  <TableCell>Phone</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {users.map((user) => (
-                  <TableRow key={user._id}>
-                    <TableCell>{user.name}</TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>{user.phone}</TableCell>
-                    <TableCell>
-                      <Chip label={user.status} color={user.status === 'approved' ? 'success' : 'warning'} size="small" />
-                    </TableCell>
-                    <TableCell>
-                      <Button size="small" color="success" startIcon={<CheckCircle />} onClick={() => handleApprove(user._id)}>
-                        Approve
-                      </Button>
-                      <Button size="small" color="error" startIcon={<Cancel />} onClick={() => handleReject(user._id)} sx={{ ml: 1 }}>
-                        Reject
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
         </CardContent>
       </Card>
 
-      <Dialog open={adjustDialogOpen} onClose={() => setAdjustDialogOpen(false)}>
-        <DialogTitle>Adjust Rates</DialogTitle>
+      {/* Users Table Card */}
+      <Card>
+        <CardContent>
+          <Tabs value={activeTab} onChange={(e, newValue) => setActiveTab(newValue)} sx={{ mb: 2 }}>
+            <Tab label={`Pending Users (${pendingUsers.length})`} />
+            <Tab label={`All Users (${allUsers.length})`} />
+          </Tabs>
+          
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : usersToShow.length === 0 ? (
+            <Alert severity="info">No users found</Alert>
+          ) : (
+            <TableContainer component={Paper}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700 }}>Name</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Email</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Phone</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {usersToShow.map((userItem) => (
+                    <TableRow key={userItem._id}>
+                      <TableCell>{userItem.name}</TableCell>
+                      <TableCell>{userItem.email}</TableCell>
+                      <TableCell>{userItem.phone}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={userItem.status || 'pending'}
+                          color={userItem.status === 'approved' ? 'success' : userItem.status === 'rejected' ? 'error' : 'warning'}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                          {userItem.status === 'pending' && (
+                            <>
+                              <Button
+                                size="small"
+                                color="success"
+                                startIcon={<CheckCircle />}
+                                onClick={() => handleApprove(userItem._id)}
+                                disabled={loadingAction}
+                                variant="contained"
+                              >
+                                Approve
+                              </Button>
+                              <Button
+                                size="small"
+                                color="error"
+                                startIcon={<Cancel />}
+                                onClick={() => handleReject(userItem._id)}
+                                disabled={loadingAction}
+                                variant="contained"
+                              >
+                                Reject
+                              </Button>
+                            </>
+                          )}
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<Visibility />}
+                            onClick={() => handleViewDocuments(userItem._id)}
+                          >
+                            View Docs
+                          </Button>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Adjust Rates Dialog */}
+      <Dialog open={adjustDialogOpen} onClose={() => setAdjustDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {adjustType === 'decrease' ? 'Decrease Rates' : 'Increase Rates'}
+        </DialogTitle>
         <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2, color: colors.textSecondary }}>
+            Enter the amount per gram to {adjustType === 'decrease' ? 'decrease' : 'increase'} rates.
+            Example: Enter 100 to {adjustType === 'decrease' ? 'decrease' : 'increase'} by ₹100/gram.
+          </Typography>
           <TextField
             fullWidth
-            label="Amount (negative to decrease)"
+            label={`Amount to ${adjustType === 'decrease' ? 'decrease' : 'increase'}`}
             type="number"
             value={adjustAmount}
             onChange={(e) => setAdjustAmount(e.target.value)}
             margin="normal"
+            placeholder="e.g., 100"
+            inputProps={{ min: 0, step: 0.01 }}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAdjustDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleAdjustRates} variant="contained">Apply</Button>
+          <Button onClick={() => setAdjustDialogOpen(false)} disabled={loadingAction}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleAdjustRates}
+            variant="contained"
+            color={adjustType === 'decrease' ? 'error' : 'success'}
+            disabled={loadingAction || !adjustAmount}
+          >
+            {loadingAction ? 'Applying...' : adjustType === 'decrease' ? 'Decrease' : 'Increase'}
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>
