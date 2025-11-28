@@ -113,12 +113,28 @@ const generateToken = (userId) => {
   });
 };
 
+// Test endpoint - simple POST without files
+router.post('/register/test', (req, res) => {
+  res.json({
+    message: 'Test endpoint working',
+    received: {
+      body: req.body,
+      headers: {
+        'content-type': req.headers['content-type'],
+        'content-length': req.headers['content-length']
+      }
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Register new user - GET handler (for testing/info)
 router.get('/register', (req, res) => {
   res.status(405).json({
     message: 'Method not allowed',
     error: 'Use POST method to register',
     endpoint: 'POST /api/auth/register',
+    testEndpoint: 'POST /api/auth/register/test (for testing without files)',
     requiredFields: {
       name: 'string',
       email: 'string (valid email)',
@@ -143,6 +159,20 @@ router.post('/register',
     res.header('Access-Control-Allow-Headers', 
       'Content-Type, Authorization, X-Requested-With, Accept, Content-Length, Origin'
     );
+    
+    // Log immediately when request arrives
+    console.log('🔔 POST /api/auth/register - Request received at:', new Date().toISOString());
+    console.log('📥 Raw request info:', {
+      method: req.method,
+      url: req.url,
+      path: req.path,
+      headers: {
+        'content-type': req.headers['content-type'],
+        'content-length': req.headers['content-length'],
+        'user-agent': req.headers['user-agent']?.substring(0, 50),
+        'origin': req.headers['origin']
+      }
+    });
     
     console.log('✅ POST /api/auth/register - Registration request received');
     const contentLength = req.headers['content-length'];

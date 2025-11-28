@@ -126,6 +126,15 @@ app.use((req, res, next) => {
   const contentType = req.headers['content-type'] || '';
   const contentLength = req.headers['content-length'];
   
+  // Log ALL incoming requests for debugging
+  console.log('🌐 Incoming request:', {
+    method: req.method,
+    path: req.path,
+    contentType: contentType.substring(0, 50),
+    contentLength: contentLength ? `${(parseInt(contentLength) / 1024 / 1024).toFixed(2)}MB` : 'unknown',
+    timestamp: new Date().toISOString()
+  });
+  
   // Log request details for debugging
   if (contentType.includes('multipart/form-data')) {
     console.log('📎 Multipart request detected:', {
