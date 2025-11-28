@@ -59,10 +59,13 @@ router.get('/', async (req, res) => {
       
       console.log(`✅ Fetched live rate: ₹${liveRate.ratePerGram}/gram (₹${liveRate.ratePerKg}/kg) from ${liveRate.source}`);
       
-      // Update all rates in MongoDB with live data
-      const rates = await SilverRate.find({ location: 'Andhra Pradesh' });
+      // Get rates from MongoDB first (faster with lean())
+      const rates = await SilverRate.find({ location: 'Andhra Pradesh' }).sort({ type: 1, 'weight.value': 1 }).lean();
       const baseRatePerGram = liveRate.ratePerGram;
       let updatedCount = 0;
+      
+      // Batch update operations for better performance
+      const updatePromises = [];
       
       for (const rate of rates) {
         if (!rate.weight || !rate.weight.value) continue;
@@ -75,29 +78,45 @@ router.get('/', async (req, res) => {
           ratePerGram = baseRatePerGram * 1.005;
         }
         
-        const oldRatePerGram = rate.ratePerGram;
-        rate.ratePerGram = Math.round(ratePerGram * 100) / 100;
+        ratePerGram = Math.round(ratePerGram * 100) / 100;
         
-        // Calculate total rate based on weight
-        let weightInGrams = rate.weight.value;
-        if (rate.weight.unit === 'kg') {
-          weightInGrams = rate.weight.value * 1000;
-        } else if (rate.weight.unit === 'oz') {
-          weightInGrams = rate.weight.value * 28.35;
-        }
-        
-        rate.rate = Math.round(rate.ratePerGram * weightInGrams * 100) / 100;
-        rate.lastUpdated = new Date();
-        await rate.save();
-        
-        if (oldRatePerGram !== rate.ratePerGram) {
+        // Only update if change is significant (> 0.01) to reduce DB writes
+        if (Math.abs(rate.ratePerGram - ratePerGram) > 0.01) {
+          // Calculate total rate based on weight
+          let weightInGrams = rate.weight.value;
+          if (rate.weight.unit === 'kg') {
+            weightInGrams = rate.weight.value * 1000;
+          } else if (rate.weight.unit === 'oz') {
+            weightInGrams = rate.weight.value * 28.35;
+          }
+          
+          const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
+          
+          // Batch update
+          updatePromises.push(
+            SilverRate.findByIdAndUpdate(rate._id, {
+              ratePerGram: ratePerGram,
+              rate: totalRate,
+              lastUpdated: new Date()
+            })
+          );
+          
+          // Update in-memory rate for response
+          rate.ratePerGram = ratePerGram;
+          rate.rate = totalRate;
+          rate.lastUpdated = new Date();
+          
           updatedCount++;
-          console.log(`  📊 Updated ${rate.name}: ₹${oldRatePerGram}/gram → ₹${rate.ratePerGram}/gram`);
         }
       }
       
+      // Execute all updates in parallel
+      if (updatePromises.length > 0) {
+        await Promise.all(updatePromises);
+        console.log(`✅ Updated ${updatedCount} rates with live data`);
+      }
+      
       ratesUpdated = updatedCount > 0;
-      console.log(`✅ Updated ${updatedCount} rates with live data`);
     } catch (rateFetchError) {
       console.error('❌ Error fetching live rates:', rateFetchError.message);
       console.error('  Stack:', rateFetchError.stack);
