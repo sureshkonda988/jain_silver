@@ -9,34 +9,30 @@ const { RATE_SOURCES, ACTIVE_RATE_SOURCE } = require('../config/rateSource');
 
 // Fetch from RB Goldspot (tab-separated format)
 // Format: ID	Name	Bid	Ask	High	Low	Status
-// Example: 2966	Silver 999 	-	166685	168779	165330	InStock
+// Live data example: 2966	Silver 999 	-	168995	170887	168885	InStock
+// Ask price is the selling price in INR per KG
 const fetchFromRBGoldspot = async () => {
   try {
     console.log('📡 Fetching from RB Goldspot...');
-    // Always fetch fresh data - no caching
     const response = await axios.get('https://bcast.rbgoldspot.com:7768/VOTSBroadcastStreaming/Services/xml/GetLiveRateByTemplateID/rbgold', {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'text/plain, text/html, */*',
         'Accept-Language': 'en-US,en;q=0.9',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
+        'Pragma': 'no-cache'
       },
-      timeout: 10000, // 10 seconds - more time for reliable fetch
+      timeout: 10000,
       maxRedirects: 5,
       responseType: 'text',
       params: { 
-        _t: Date.now(), // Cache busting - ensures fresh data every second
-        _r: Math.random() // Additional cache busting
+        _t: Date.now(),
+        _r: Math.random()
       },
-      validateStatus: function (status) {
-        return status >= 200 && status < 300; // Accept only 2xx responses
-      }
+      validateStatus: (status) => status >= 200 && status < 300
     });
 
-    console.log('✅ Received response from RB Goldspot (status:', response.status, ')');
-    console.log('Response preview:', response.data?.substring(0, 300) || 'No data');
+    console.log('✅ RB Goldspot response received (status:', response.status, ')');
 
     // Parse tab-separated format
     // Format from API: ID	Name	Bid	Ask	High	Low	Status
