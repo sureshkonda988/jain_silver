@@ -501,15 +501,15 @@ mongoose.connection.once('open', async () => {
       const lastRate = await SilverRate.findOne({ location: 'Andhra Pradesh' }).sort({ lastUpdated: -1 });
       if (lastRate && lastRate.ratePerGram) {
         const ratesRouter = require('./routes/rates');
-        // Access the cachedBaseRate through the module
-        if (ratesRouter.cachedBaseRate !== undefined) {
-          ratesRouter.cachedBaseRate = {
+        // Set the cached base rate using the setter
+        if (ratesRouter.setCachedBaseRate) {
+          ratesRouter.setCachedBaseRate({
             ratePerGram: lastRate.ratePerGram,
             ratePerKg: lastRate.ratePerGram * 1000,
             source: 'mongodb',
             lastUpdated: lastRate.lastUpdated || new Date(),
             usdInrRate: 89.25
-          };
+          });
           console.log(`✅ Loaded rate from MongoDB: ₹${lastRate.ratePerGram}/gram`);
         }
       } else {
