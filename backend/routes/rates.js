@@ -17,6 +17,7 @@ let cachedBaseRate = {
 
 // Track last update attempt to prevent too frequent updates
 let lastUpdateAttempt = 0;
+let lastSuccessfulUpdate = 0;
 const MIN_UPDATE_INTERVAL = 1000; // Update at most once per second
 
 // Update rates from endpoints (non-blocking)
@@ -24,13 +25,17 @@ const updateRatesFromEndpoints = async () => {
   const now = Date.now();
   
   // Prevent too frequent updates (max once per second)
-  if (now - lastUpdateAttempt < MIN_UPDATE_INTERVAL) {
-    return; // Skip if updated recently
+  // But allow update if last successful update was more than 2 seconds ago
+  const timeSinceLastAttempt = now - lastUpdateAttempt;
+  const timeSinceLastSuccess = now - lastSuccessfulUpdate;
+  
+  if (timeSinceLastAttempt < MIN_UPDATE_INTERVAL && timeSinceLastSuccess < 2000) {
+    return; // Skip if updated recently AND last success was recent
   }
   
   lastUpdateAttempt = now;
   
-  console.log('📡 Fetching rates from endpoints...');
+  console.log(`📡 Fetching rates from endpoints... (last attempt: ${timeSinceLastAttempt}ms ago, last success: ${timeSinceLastSuccess}ms ago)`);
   
   try {
     const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
@@ -61,6 +66,9 @@ const updateRatesFromEndpoints = async () => {
       
       // Always log updates
       console.log(`✅ Rate updated: ₹${oldRate.toFixed(2)} → ₹${liveRate.ratePerGram.toFixed(2)}/gram (${liveRate.source || 'live'})`);
+      
+      // Mark successful update
+      lastSuccessfulUpdate = Date.now();
       
       // Update MongoDB immediately (await to ensure it completes)
       try {
@@ -184,9 +192,17 @@ router.get('/', async (req, res) => {
     
     // ALWAYS try to update rates (non-blocking, returns cache immediately)
     // This ensures rates update every second on Vercel (serverless)
-    updateRatesFromEndpoints().catch((err) => {
+    // Don't await - return cache immediately, update happens in background
+    const updatePromise = updateRatesFromEndpoints();
+    updatePromise.catch((err) => {
       console.error('❌ Update failed in GET handler:', err.message);
     });
+    
+    // Log cache status
+    const cacheAge = Date.now() - cachedBaseRate.lastUpdated.getTime();
+    if (cacheAge > 5000) {
+      console.warn(`⚠️ Cache is stale: ${Math.round(cacheAge / 1000)}s old`);
+    }
     
     // Use cached rate for FAST response (always returns immediately)
     const baseRatePerGram = cachedBaseRate.ratePerGram;
