@@ -102,16 +102,24 @@ app.options('*', (req, res) => {
   res.sendStatus(204);
 });
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-// Handle multipart/form-data for file uploads - don't parse it, let multer handle it
+// IMPORTANT: Only parse JSON and URL-encoded bodies
+// DO NOT parse multipart/form-data - multer will handle it
 app.use((req, res, next) => {
-  if (req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data')) {
-    // Don't parse multipart/form-data - let multer handle it
+  const contentType = req.headers['content-type'] || '';
+  
+  // Skip body parsing for multipart/form-data - multer needs the raw stream
+  if (contentType.includes('multipart/form-data')) {
+    console.log('📎 Skipping body parsing for multipart/form-data - multer will handle it');
     return next();
   }
+  
+  // Parse JSON and URL-encoded for other content types
   next();
 });
+
+// Parse JSON bodies (but not multipart/form-data)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Note: File uploads now go to S3, but keep static route for backward compatibility
 app.use('/uploads', express.static('uploads'));
 

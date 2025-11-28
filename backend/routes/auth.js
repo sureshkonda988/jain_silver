@@ -163,6 +163,9 @@ router.post('/register',
     console.log('📦 Multer middleware - Processing file uploads...');
     console.log('Content-Type:', req.headers['content-type']);
     console.log('Content-Length:', req.headers['content-length']);
+    console.log('Request body type:', typeof req.body);
+    console.log('Request body keys:', req.body ? Object.keys(req.body) : 'No body');
+    console.log('Request has files before multer:', !!req.files);
     
     // Handle multer errors with timeout
     const uploadMiddleware = upload.fields([
@@ -212,11 +215,16 @@ router.post('/register',
       }
       console.log('✅ Multer processing completed');
       console.log('Files received:', req.files ? Object.keys(req.files) : 'No files');
+      console.log('Request body after multer:', req.body ? Object.keys(req.body) : 'No body');
       if (req.files) {
         Object.keys(req.files).forEach(key => {
           const file = Array.isArray(req.files[key]) ? req.files[key][0] : req.files[key];
-          console.log(`  - ${key}: ${file?.size || 0} bytes, ${file?.mimetype || 'unknown type'}`);
+          console.log(`  - ${key}: ${file?.size || 0} bytes, ${file?.mimetype || 'unknown type'}, buffer: ${!!file?.buffer}`);
         });
+      } else {
+        console.error('⚠️  WARNING: req.files is undefined or empty after multer processing');
+        console.error('   This usually means multer did not parse the multipart/form-data correctly');
+        console.error('   Check Content-Type header and ensure request is multipart/form-data');
       }
       next();
     });
