@@ -4,11 +4,9 @@ const auth = require('../middleware/auth');
 const SilverRate = require('../models/SilverRate');
 
 // In-memory store for manual adjustments (per rate type)
-// Format: { "Silver Coin 1 Gram": { manualAdjustment: 0, ... }, ... }
-// Exported so admin.js can access it
 let manualAdjustments = {};
 
-// Cache for live base rate (updated in background)
+// Cache for live base rate (updated on every request)
 let cachedBaseRate = {
   ratePerGram: 169.0, // Default fallback rate
   ratePerKg: 169000,
@@ -17,36 +15,29 @@ let cachedBaseRate = {
   usdInrRate: 89.25
 };
 
-// Background rate updater - updates cache every second
-let backgroundUpdateInterval = null;
+// Track last update attempt to prevent too frequent updates
+let lastUpdateAttempt = 0;
+const MIN_UPDATE_INTERVAL = 1000; // Update at most once per second
 
-// Start background rate updater
-const startBackgroundRateUpdater = () => {
-  if (backgroundUpdateInterval) {
-    return; // Already running
+// Update rates from endpoints (non-blocking)
+const updateRatesFromEndpoints = async () => {
+  const now = Date.now();
+  
+  // Prevent too frequent updates (max once per second)
+  if (now - lastUpdateAttempt < MIN_UPDATE_INTERVAL) {
+    return; // Skip if updated recently
   }
-
-  console.log('🔄 Starting background rate updater...');
   
-  // Update immediately
-  updateRatesInBackground();
+  lastUpdateAttempt = now;
   
-  // Then update every second
-  backgroundUpdateInterval = setInterval(() => {
-    updateRatesInBackground();
-  }, 1000);
-};
-
-// Update rates in background (non-blocking)
-const updateRatesInBackground = async () => {
   try {
     const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
     
-    // Fetch with timeout for background updates
+    // Fetch with timeout
     const liveRate = await Promise.race([
       fetchSilverRatesFromMultipleSources(),
       new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Background timeout')), 8000) // 8s for background
+        setTimeout(() => reject(new Error('Timeout')), 8000) // 8s timeout
       )
     ]);
 
@@ -60,33 +51,44 @@ const updateRatesInBackground = async () => {
         usdInrRate: liveRate.usdInrRate || 89.25
       };
       
-      // Log update
+      // Log rate changes
       if (Math.abs(oldRate - liveRate.ratePerGram) > 0.01) {
         console.log(`✅ Rate updated: ₹${oldRate.toFixed(2)} → ₹${liveRate.ratePerGram.toFixed(2)}/gram (${liveRate.source || 'live'})`);
       }
       
-      // Update MongoDB in background (don't block)
-      updateMongoDBRates(liveRate).catch((err) => {
-        console.error('❌ MongoDB update failed:', err.message);
-      });
+      // Update MongoDB immediately (await to ensure it completes)
+      try {
+        await updateMongoDBRates(liveRate);
+      } catch (mongoError) {
+        console.error('❌ MongoDB update failed:', mongoError.message);
+      }
     } else {
-      console.warn('⚠️ Invalid rate received in background update:', liveRate);
+      console.warn('⚠️ Invalid rate received:', liveRate);
     }
   } catch (error) {
-    // Log errors more frequently to debug
-    if (Math.random() < 0.1) { // Log 10% of failures
-      console.warn('⚠️ Background rate update failed:', error.message);
+    // Log errors occasionally
+    if (Math.random() < 0.05) { // Log 5% of failures
+      console.warn('⚠️ Rate fetch failed:', error.message);
     }
   }
 };
 
-// Update MongoDB rates (async, non-blocking)
+// Update MongoDB rates (synchronous to ensure updates)
 const updateMongoDBRates = async (liveRate) => {
   try {
     const mongoose = require('mongoose');
     if (mongoose.connection.readyState !== 1) {
-      console.warn('⚠️ MongoDB not connected, skipping rate update');
-      return; // Skip if not connected
+      // Try to connect if not connected
+      try {
+        await mongoose.connect(process.env.MONGODB_URI, {
+          useNewUrlParser: true,
+          useUnifiedTopology: true,
+          serverSelectionTimeoutMS: 3000,
+        });
+      } catch (connError) {
+        console.warn('⚠️ MongoDB connection failed:', connError.message);
+        return;
+      }
     }
 
     const baseRatePerGram = liveRate.ratePerGram;
@@ -104,7 +106,7 @@ const updateMongoDBRates = async (liveRate) => {
     ];
 
     let updatedCount = 0;
-    for (const rateDef of rateDefinitions) {
+    const updatePromises = rateDefinitions.map(async (rateDef) => {
       try {
         let ratePerGram = baseRatePerGram;
         if (rateDef.purity === '92.5%') {
@@ -146,17 +148,20 @@ const updateMongoDBRates = async (liveRate) => {
       } catch (err) {
         console.error(`❌ Failed to update ${rateDef.name}:`, err.message);
       }
-    }
+    });
     
-    if (updatedCount > 0 && Math.random() < 0.1) { // Log 10% of successful updates
-      console.log(`✅ Updated ${updatedCount} rates in MongoDB`);
+    // Wait for all updates to complete
+    await Promise.all(updatePromises);
+    
+    if (updatedCount > 0) {
+      console.log(`✅ Updated ${updatedCount} rates in MongoDB (₹${baseRatePerGram.toFixed(2)}/gram)`);
     }
   } catch (error) {
     console.error('❌ MongoDB rate update error:', error.message);
   }
 };
 
-// Get all silver rates - FAST response using cache, updates in background
+// Get all silver rates - ALWAYS tries to update, returns cache immediately
 router.get('/', async (req, res) => {
   try {
     // Try to get user from auth if token is provided, but don't require it
@@ -170,18 +175,9 @@ router.get('/', async (req, res) => {
       // No valid token - continue without auth
     }
     
-    // Start background updater if not already running
-    // On Vercel (serverless), this might restart on each request, which is fine
-    if (!backgroundUpdateInterval) {
-      startBackgroundRateUpdater();
-    }
-    
-    // Check if cache is stale (older than 2 seconds) and trigger update
-    const cacheAge = Date.now() - cachedBaseRate.lastUpdated.getTime();
-    if (cacheAge > 2000) {
-      // Cache is stale, trigger update (non-blocking)
-      updateRatesInBackground().catch(() => {});
-    }
+    // ALWAYS try to update rates (non-blocking, returns cache immediately)
+    // This ensures rates update every second on Vercel (serverless)
+    updateRatesFromEndpoints().catch(() => {});
     
     // Use cached rate for FAST response (always returns immediately)
     const baseRatePerGram = cachedBaseRate.ratePerGram;
@@ -312,11 +308,17 @@ router.put('/:id', auth, async (req, res) => {
   }
 });
 
-// Force rate update (admin only) - triggers immediate background update
+// Force rate update (admin only) - triggers immediate update
 router.post('/force-update', auth, async (req, res) => {
   try {
-    updateRatesInBackground();
-    res.json({ message: 'Background rate update triggered. Rates will update shortly.' });
+    // Reset last update attempt to force immediate update
+    lastUpdateAttempt = 0;
+    await updateRatesFromEndpoints();
+    res.json({ 
+      message: 'Rate update triggered successfully.',
+      currentRate: cachedBaseRate.ratePerGram,
+      source: cachedBaseRate.source
+    });
   } catch (error) {
     console.error('Force update error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -346,11 +348,11 @@ router.post('/initialize', async (req, res) => {
       console.warn('⚠️ MongoDB not connected, using default cache');
     }
     
-    // Start background updater
-    startBackgroundRateUpdater();
+    // Trigger immediate update
+    updateRatesFromEndpoints().catch(() => {});
     
     res.json({ 
-      message: 'Rate system initialized. Background updater started.',
+      message: 'Rate system initialized. Updates will happen on every request.',
       currentRate: cachedBaseRate.ratePerGram,
       source: cachedBaseRate.source
     });
@@ -363,4 +365,3 @@ router.post('/initialize', async (req, res) => {
 // Export manualAdjustments so admin.js can modify them
 module.exports = router;
 module.exports.manualAdjustments = manualAdjustments;
-module.exports.startBackgroundRateUpdater = startBackgroundRateUpdater;
