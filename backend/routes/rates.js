@@ -20,6 +20,9 @@ let lastUpdateAttempt = 0;
 let lastSuccessfulUpdate = 0;
 const MIN_UPDATE_INTERVAL = 1000; // Update at most once per second
 
+// Rate smoothing: Only update if change is significant (prevents rapid fluctuations)
+const RATE_CHANGE_THRESHOLD = 0.01; // Minimum change of ₹0.01/gram to trigger update
+
 // Update rates from endpoints (non-blocking)
 const updateRatesFromEndpoints = async () => {
   const now = Date.now();
@@ -56,25 +59,44 @@ const updateRatesFromEndpoints = async () => {
 
     if (liveRate && liveRate.ratePerGram && liveRate.ratePerGram > 0) {
       const oldRate = cachedBaseRate.ratePerGram;
-      cachedBaseRate = {
-        ratePerGram: liveRate.ratePerGram,
-        ratePerKg: liveRate.ratePerKg || (liveRate.ratePerGram * 1000),
-        source: liveRate.source || 'live',
-        lastUpdated: new Date(),
-        usdInrRate: liveRate.usdInrRate || 89.25
-      };
+      const rateChange = Math.abs(liveRate.ratePerGram - oldRate);
       
-      // Always log updates
-      console.log(`✅ Rate updated: ₹${oldRate.toFixed(2)} → ₹${liveRate.ratePerGram.toFixed(2)}/gram (${liveRate.source || 'live'})`);
+      // Only update if change is significant OR if cache is stale (older than 5 seconds)
+      const cacheAge = Date.now() - cachedBaseRate.lastUpdated.getTime();
+      const isStale = cacheAge > 5000;
       
-      // Mark successful update
-      lastSuccessfulUpdate = Date.now();
-      
-      // Update MongoDB immediately (await to ensure it completes)
-      try {
-        await updateMongoDBRates(liveRate);
-      } catch (mongoError) {
-        console.error('❌ MongoDB update failed:', mongoError.message);
+      if (rateChange >= RATE_CHANGE_THRESHOLD || isStale || oldRate === 169.0) {
+        // Round to 2 decimal places for consistency
+        const roundedRate = Math.round(liveRate.ratePerGram * 100) / 100;
+        
+        cachedBaseRate = {
+          ratePerGram: roundedRate,
+          ratePerKg: Math.round(roundedRate * 1000),
+          source: liveRate.source || 'live',
+          lastUpdated: new Date(),
+          usdInrRate: liveRate.usdInrRate || 89.25
+        };
+        
+        // Log updates with change indicator
+        const changeIndicator = rateChange >= RATE_CHANGE_THRESHOLD 
+          ? (liveRate.ratePerGram > oldRate ? '↑' : '↓')
+          : '≈';
+        console.log(`✅ Rate updated: ₹${oldRate.toFixed(2)} → ₹${roundedRate.toFixed(2)}/gram ${changeIndicator} (${liveRate.source || 'live'})`);
+        
+        // Mark successful update
+        lastSuccessfulUpdate = Date.now();
+        
+        // Update MongoDB immediately (await to ensure it completes)
+        try {
+          // Use rounded rate for MongoDB update
+          const roundedLiveRate = { ...liveRate, ratePerGram: roundedRate, ratePerKg: Math.round(roundedRate * 1000) };
+          await updateMongoDBRates(roundedLiveRate);
+        } catch (mongoError) {
+          console.error('❌ MongoDB update failed:', mongoError.message);
+        }
+      } else {
+        // Rate change too small, skip update but log
+        console.log(`⏭️ Rate change too small (${rateChange.toFixed(4)} < ${RATE_CHANGE_THRESHOLD}), keeping cached rate: ₹${oldRate.toFixed(2)}/gram`);
       }
     } else {
       console.warn('⚠️ Invalid rate received:', liveRate);

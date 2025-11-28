@@ -67,28 +67,35 @@ const fetchFromRBGoldspot = async () => {
         if (id === '2966' && !name.toLowerCase().includes('mini')) {
           silver999Data = { id, name, bid, ask, high, low };
           
-          // Priority: Ask > High > Bid (Ask is selling price, most relevant)
+          // ALWAYS use Ask price (selling price, most consistent)
+          // Only fallback to High if Ask is completely unavailable
           // Format: Ask price is per kg, convert to per gram
           if (ask && ask !== '-' && ask !== '' && ask !== '0' && !isNaN(parseFloat(ask))) {
-            ratePerKg = parseFloat(ask);
-            if (ratePerKg > 0) {
+            const parsedAsk = parseFloat(ask);
+            if (parsedAsk > 0) {
+              ratePerKg = parsedAsk;
               ratePerGram = ratePerKg / 1000;
+              console.log(`📊 Using ASK price: ₹${ratePerKg}/kg = ₹${ratePerGram.toFixed(2)}/gram`);
               break; // Found rate, exit loop
             }
           }
-          // Try High price if Ask not available
+          // Fallback to High ONLY if Ask is completely unavailable (not just different)
           if (!ratePerGram && high && high !== '-' && high !== '' && high !== '0' && !isNaN(parseFloat(high))) {
-            ratePerKg = parseFloat(high);
-            if (ratePerKg > 0) {
+            const parsedHigh = parseFloat(high);
+            if (parsedHigh > 0) {
+              ratePerKg = parsedHigh;
               ratePerGram = ratePerKg / 1000;
+              console.log(`⚠️ ASK unavailable, using HIGH price: ₹${ratePerKg}/kg = ₹${ratePerGram.toFixed(2)}/gram`);
               break;
             }
           }
           // Try Bid price as last resort
           if (!ratePerGram && bid && bid !== '-' && bid !== '' && bid !== '0' && !isNaN(parseFloat(bid))) {
-            ratePerKg = parseFloat(bid);
-            if (ratePerKg > 0) {
+            const parsedBid = parseFloat(bid);
+            if (parsedBid > 0) {
+              ratePerKg = parsedBid;
               ratePerGram = ratePerKg / 1000;
+              console.log(`⚠️ ASK/HIGH unavailable, using BID price: ₹${ratePerKg}/kg = ₹${ratePerGram.toFixed(2)}/gram`);
               break;
             }
           }
@@ -115,15 +122,19 @@ const fetchFromRBGoldspot = async () => {
     }
 
     if (ratePerGram && ratePerGram > 0 && !isNaN(ratePerGram)) {
+      // Round consistently: 2 decimal places for gram, whole number for kg
+      const roundedRatePerGram = Math.round(ratePerGram * 100) / 100;
+      const roundedRatePerKg = Math.round(roundedRatePerGram * 1000);
+      
       const result = {
-        ratePerKg: Math.round(ratePerKg),
-        ratePerGram: Math.round(ratePerGram * 100) / 100,
+        ratePerKg: roundedRatePerKg,
+        ratePerGram: roundedRatePerGram,
         source: 'bcast.rbgoldspot.com',
         timestamp: new Date(),
         rawData: silver999Data,
         usdInrRate: usdInrRate || 89.25 // Default if not found
       };
-      console.log(`✅ Successfully extracted rate from RB Goldspot: ₹${result.ratePerGram}/gram (₹${result.ratePerKg}/kg)`);
+      console.log(`✅ Successfully extracted rate from RB Goldspot: ₹${result.ratePerGram.toFixed(2)}/gram (₹${result.ratePerKg}/kg) [Ask: ${silver999Data?.ask || 'N/A'}, High: ${silver999Data?.high || 'N/A'}]`);
       return result;
     }
     
