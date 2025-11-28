@@ -759,27 +759,48 @@ router.post('/signin',
         return res.status(401).json({ message: 'Invalid credentials' });
       }
 
-      // Allow verified users to sign in even if pending (they can check status)
-      // But reject users with rejected status
-      if (user.status === 'rejected') {
+      // Check if user is approved - ONLY approved users can sign in
+      if (user.status !== 'approved') {
+        console.warn('❌ Login attempt by unapproved user:', { 
+          email: user.email, 
+          status: user.status,
+          isVerified: user.isVerified 
+        });
+        
+        if (user.status === 'rejected') {
+          return res.status(403).json({ 
+            message: 'Your account has been rejected. Please contact admin for assistance.',
+            status: user.status
+          });
+        } else if (user.status === 'pending') {
+          return res.status(403).json({ 
+            message: 'Your account is pending admin approval. Please wait for approval before signing in.',
+            status: user.status
+          });
+        } else {
+          return res.status(403).json({ 
+            message: 'Your account is not approved. Please contact admin.',
+            status: user.status
+          });
+        }
+      }
+
+      // Check if user is verified (OTP verified)
+      if (!user.isVerified) {
+        console.warn('❌ Login attempt by unverified user:', { email: user.email });
         return res.status(403).json({ 
-          message: 'Account has been rejected. Please contact admin.',
-          status: user.status
+          message: 'Please verify your OTP before signing in. Check your email for OTP or request a new one.',
+          status: 'unverified'
         });
       }
 
-      // Generate token
+      // Generate token - only for approved and verified users
       const token = generateToken(user._id);
-
-      // If user is pending, include a warning message
-      const responseMessage = user.status === 'approved' 
-        ? 'Sign in successful' 
-        : `Sign in successful. Your account is ${user.status}. Please wait for admin approval.`;
 
       console.log('✅ Sign in successful:', { email: user.email, status: user.status });
 
       res.json({
-        message: responseMessage,
+        message: 'Sign in successful',
         token,
         user: {
           id: user._id,
@@ -789,10 +810,7 @@ router.post('/signin',
           role: user.role,
           status: user.status,
           isVerified: user.isVerified
-        },
-        ...(user.status !== 'approved' && { 
-          warning: `Your account is ${user.status}. Some features may be limited until admin approval.` 
-        })
+        }
       });
     } catch (error) {
       console.error('❌ Sign in error:', error);
