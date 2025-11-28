@@ -44,80 +44,89 @@ router.get('/', async (req, res) => {
     let liveRate = null;
     let ratesUpdated = false;
     try {
-      console.log('🔄 Fetching live rates (NO FALLBACK - must succeed)...');
+      console.log('🔄 Fetching live rates from RB Goldspot...');
       const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
-      liveRate = await fetchSilverRatesFromMultipleSources();
+      
+      // Set timeout for RB Goldspot API call (10 seconds)
+      const fetchPromise = fetchSilverRatesFromMultipleSources();
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('RB Goldspot API timeout')), 10000)
+      );
+      
+      liveRate = await Promise.race([fetchPromise, timeoutPromise]);
       
       if (!liveRate || !liveRate.ratePerGram || liveRate.ratePerGram <= 0) {
-        console.error('❌ Failed to fetch live rate - NO FALLBACK ALLOWED');
-        return res.status(503).json({ 
-          message: 'Live rate service unavailable', 
-          error: 'Unable to fetch live rates. Please try again in a moment.',
-          retryAfter: 2
-        });
+        console.warn('⚠️ Failed to fetch live rate, will use cached rates if available');
+        // Don't return error immediately - try to return cached rates below
+      } else {
+        console.log(`✅ Fetched live rate: ₹${liveRate.ratePerGram}/gram (₹${liveRate.ratePerKg}/kg) from ${liveRate.source}`);
       }
-      
-      console.log(`✅ Fetched live rate: ₹${liveRate.ratePerGram}/gram (₹${liveRate.ratePerKg}/kg) from ${liveRate.source}`);
       
       // Get rates from MongoDB (need full documents for manualAdjustment)
       const allRates = await SilverRate.find({ location: 'Andhra Pradesh' }).sort({ type: 1, 'weight.value': 1 });
-      const baseRatePerGram = liveRate.ratePerGram;
-      let updatedCount = 0;
       
-      // Batch update operations for better performance
-      const updatePromises = [];
-      
-      for (const rate of allRates) {
-        if (!rate.weight || !rate.weight.value) continue;
+      // If we have a live rate, update all rates
+      if (liveRate && liveRate.ratePerGram && liveRate.ratePerGram > 0) {
+        const baseRatePerGram = liveRate.ratePerGram;
+        let updatedCount = 0;
         
-        // Calculate rate per gram based on purity
-        let ratePerGram = baseRatePerGram;
-        if (rate.purity === '92.5%') {
-          ratePerGram = baseRatePerGram * 0.96;
-        } else if (rate.purity === '99.99%') {
-          ratePerGram = baseRatePerGram * 1.005;
-        }
+        // Batch update operations for better performance
+        const updatePromises = [];
         
-        // Apply manual adjustment if exists (can be negative for decrease)
-        const manualAdjustment = (rate.manualAdjustment !== undefined && rate.manualAdjustment !== null) ? rate.manualAdjustment : 0;
-        ratePerGram = ratePerGram + manualAdjustment;
-        ratePerGram = Math.max(0, Math.round(ratePerGram * 100) / 100); // Ensure non-negative
-        
-        // Always update to ensure live rates (remove threshold check for real-time updates)
-        if (Math.abs(rate.ratePerGram - ratePerGram) > 0.001) {
-          // Calculate total rate based on weight
-          let weightInGrams = rate.weight.value;
-          if (rate.weight.unit === 'kg') {
-            weightInGrams = rate.weight.value * 1000;
-          } else if (rate.weight.unit === 'oz') {
-            weightInGrams = rate.weight.value * 28.35;
+        for (const rate of allRates) {
+          if (!rate.weight || !rate.weight.value) continue;
+          
+          // Calculate rate per gram based on purity
+          let ratePerGram = baseRatePerGram;
+          if (rate.purity === '92.5%') {
+            ratePerGram = baseRatePerGram * 0.96;
+          } else if (rate.purity === '99.99%') {
+            ratePerGram = baseRatePerGram * 1.005;
           }
           
-          const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
+          // Apply manual adjustment if exists (can be negative for decrease)
+          const manualAdjustment = (rate.manualAdjustment !== undefined && rate.manualAdjustment !== null) ? rate.manualAdjustment : 0;
+          ratePerGram = ratePerGram + manualAdjustment;
+          ratePerGram = Math.max(0, Math.round(ratePerGram * 100) / 100); // Ensure non-negative
           
-          // Batch update
-          updatePromises.push(
-            SilverRate.findByIdAndUpdate(rate._id, {
-              ratePerGram: ratePerGram,
-              rate: totalRate,
-              lastUpdated: new Date()
-            })
-          );
-          
-          updatedCount++;
-        } else {
-          // Even if rate didn't change, ensure manualAdjustment is applied for response
-          rate.ratePerGram = ratePerGram;
+          // Always update to ensure live rates (remove threshold check for real-time updates)
+          if (Math.abs(rate.ratePerGram - ratePerGram) > 0.001) {
+            // Calculate total rate based on weight
+            let weightInGrams = rate.weight.value;
+            if (rate.weight.unit === 'kg') {
+              weightInGrams = rate.weight.value * 1000;
+            } else if (rate.weight.unit === 'oz') {
+              weightInGrams = rate.weight.value * 28.35;
+            }
+            
+            const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
+            
+            // Batch update
+            updatePromises.push(
+              SilverRate.findByIdAndUpdate(rate._id, {
+                ratePerGram: ratePerGram,
+                rate: totalRate,
+                lastUpdated: new Date()
+              })
+            );
+            
+            updatedCount++;
+          } else {
+            // Even if rate didn't change, ensure manualAdjustment is applied for response
+            rate.ratePerGram = ratePerGram;
+          }
         }
+        
+        // Execute all updates in parallel
+        if (updatePromises.length > 0) {
+          await Promise.all(updatePromises);
+          console.log(`✅ Updated ${updatedCount} rates with live data`);
+        }
+        
+        ratesUpdated = updatedCount > 0;
+      } else {
+        console.warn('⚠️ No live rate available, using existing rates from database');
       }
-      
-      // Execute all updates in parallel
-      if (updatePromises.length > 0) {
-        await Promise.all(updatePromises);
-        console.log(`✅ Updated ${updatedCount} rates with live data`);
-      }
-      
-      ratesUpdated = updatedCount > 0;
       
       // Convert rates to plain objects for response
       const ratesToReturn = allRates.map(rate => {
@@ -147,29 +156,25 @@ router.get('/', async (req, res) => {
     } catch (rateFetchError) {
       console.error('❌ Error fetching live rates:', rateFetchError.message);
       console.error('  Stack:', rateFetchError.stack);
-      // NO FALLBACK - return error instead of cached rates
+      
+      // Return cached rates if available (fallback for network issues)
+      try {
+        const cachedRates = await SilverRate.find({ location: 'Andhra Pradesh' }).sort({ type: 1, 'weight.value': 1 }).lean();
+        if (cachedRates && cachedRates.length > 0) {
+          console.warn('⚠️ Using cached rates due to live fetch error');
+          return res.json(cachedRates);
+        }
+      } catch (cacheError) {
+        console.error('❌ Error fetching cached rates:', cacheError.message);
+      }
+      
+      // If no cached rates, return error
       return res.status(503).json({ 
         message: 'Live rate service error', 
         error: rateFetchError.message || 'Unable to fetch live rates. Please try again.',
         retryAfter: 2
       });
     }
-    
-    // Add USD rate if available
-    if (liveRate && liveRate.usdInrRate) {
-      ratesToReturn.forEach(rate => {
-        rate.usdInrRate = liveRate.usdInrRate;
-      });
-    }
-    
-    // Add metadata about live rate fetch
-    if (liveRate) {
-      console.log(`📤 Returning ${ratesToReturn.length} rates (live rate: ₹${liveRate.ratePerGram}/gram from ${liveRate.source})`);
-    } else {
-      console.log(`📤 Returning ${ratesToReturn.length} rates from cache (live fetch failed)`);
-    }
-    
-    res.json(ratesToReturn);
   } catch (error) {
     console.error('Get rates error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
