@@ -165,25 +165,37 @@ const connectDB = async () => {
   try {
     // Check if already connected
     if (mongoose.connection.readyState === 1) {
+      console.log('✅ MongoDB already connected');
       return mongoose.connection;
     }
 
     // If connecting, wait for it
     if (mongoose.connection.readyState === 2) {
+      console.log('⏳ MongoDB connection in progress, waiting...');
       await new Promise((resolve) => {
         mongoose.connection.once('connected', resolve);
         mongoose.connection.once('error', resolve);
       });
       if (mongoose.connection.readyState === 1) {
+        console.log('✅ MongoDB connected (was in progress)');
         return mongoose.connection;
       }
     }
 
+    // Get MongoDB URI
+    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/jain_silver';
+    
+    // Log connection attempt (but hide password)
+    const uriForLogging = mongoURI.replace(/mongodb\+srv:\/\/([^:]+):([^@]+)@/, 'mongodb+srv://$1:***@');
+    console.log('🔌 Attempting MongoDB connection...');
+    console.log('   URI:', uriForLogging);
+    console.log('   Has MONGODB_URI:', !!process.env.MONGODB_URI);
+    
     // Connect with platform-optimized settings
     const dbConfig = {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      serverSelectionTimeoutMS: (database && database.serverSelectionTimeoutMS) || 5000,
+      serverSelectionTimeoutMS: (database && database.serverSelectionTimeoutMS) || 10000, // Increased to 10s
       socketTimeoutMS: (database && database.socketTimeoutMS) || 45000,
       maxPoolSize: (database && database.maxPoolSize) || 10,
       minPoolSize: (database && database.minPoolSize) || 1,
@@ -191,15 +203,30 @@ const connectDB = async () => {
       retryReads: (database && database.retryReads) !== undefined ? database.retryReads : true,
     };
     
-    const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/jain_silver', dbConfig);
-    console.log('✅ MongoDB Connected');
+    const conn = await mongoose.connect(mongoURI, dbConfig);
+    console.log('✅ MongoDB Connected successfully');
+    console.log('   Database:', conn.connection.name);
+    console.log('   Host:', conn.connection.host);
     return conn;
   } catch (err) {
     console.error('❌ MongoDB connection error:', err.message || err);
+    console.error('   Error name:', err.name);
+    console.error('   Error code:', err.code);
+    
+    // Provide specific error messages
     if (err.message && err.message.includes('whitelist')) {
       console.error('⚠️  IP Whitelist Issue: Add 0.0.0.0/0 to MongoDB Atlas Network Access');
       console.error('📖 See: backend/MONGODB_VERCEL_SETUP.md for instructions');
+    } else if (err.message && err.message.includes('authentication failed')) {
+      console.error('⚠️  Authentication failed: Check MongoDB username and password in MONGODB_URI');
+    } else if (err.message && err.message.includes('ENOTFOUND') || err.message && err.message.includes('getaddrinfo')) {
+      console.error('⚠️  DNS/Network issue: Check if MongoDB URI is correct');
+      console.error('   Make sure MONGODB_URI is set in Vercel environment variables');
+    } else if (err.message && err.message.includes('timeout')) {
+      console.error('⚠️  Connection timeout: MongoDB Atlas might be unreachable');
+      console.error('   Check MongoDB Atlas cluster status');
     }
+    
     // Don't throw in serverless - let routes handle it gracefully
     if (!process.env.VERCEL) {
       throw err;
