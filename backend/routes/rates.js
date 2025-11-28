@@ -40,26 +40,25 @@ router.get('/', async (req, res) => {
       // No valid token, but we'll still return rates for public viewing
     }
     
-    // Fetch live rates - NO FALLBACK, must get live data
+    // Fetch live rates EVERY SECOND - always fetch fresh data
     let liveRate = null;
-    let ratesUpdated = false;
     try {
-      console.log('🔄 Fetching live rates from RB Goldspot...');
+      // Always fetch fresh data - no caching for real-time updates
       const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
       
       // Fetch live rates with aggressive timeout for real-time updates (every second)
-      try {
-        liveRate = await Promise.race([
-          fetchSilverRatesFromMultipleSources(),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('RB Goldspot API timeout')), 6000) // 6 seconds max for real-time updates
-          )
-        ]);
-      } catch (timeoutError) {
-        // Timeout occurred - continue with null liveRate and use cached rates
-        // Don't log timeouts to avoid spam (happens frequently with 1-second polling)
-        liveRate = null;
-      }
+      // Use Promise.race to ensure we don't wait too long
+      liveRate = await Promise.race([
+        fetchSilverRatesFromMultipleSources(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('RB Goldspot API timeout')), 5000) // 5 seconds max
+        )
+      ]);
+    } catch (fetchError) {
+      // If fetch fails, continue with null - will use cached rates
+      // Don't log errors to avoid spam (happens frequently with 1-second polling)
+      liveRate = null;
+    }
       
       if (!liveRate || !liveRate.ratePerGram || liveRate.ratePerGram <= 0) {
         console.warn('⚠️ Failed to fetch live rate, will use cached rates if available');

@@ -55,11 +55,7 @@ function HomePage() {
       // Add cache-busting timestamp to ensure fresh data every second
       const response = await api.get('/rates', { 
         timeout: 8000, // 8 seconds timeout for faster updates
-        params: { _t: Date.now() }, // Cache busting - ensures fresh data
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
+        params: { _t: Date.now() } // Cache busting - ensures fresh data (timestamp in URL)
       });
       const newRates = response.data;
       const updateTime = new Date();

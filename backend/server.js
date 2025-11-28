@@ -98,6 +98,8 @@ app.use(cors({
     'Origin',
     'X-HTTP-Method-Override',
     'Access-Control-Allow-Origin',
+    'Cache-Control',
+    'Pragma',
     'Access-Control-Allow-Headers',
     'Access-Control-Allow-Methods'
   ],
