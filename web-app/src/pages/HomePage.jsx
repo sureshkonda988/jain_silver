@@ -179,7 +179,7 @@ function HomePage() {
 
   const fetchRates = async () => {
     try {
-      const response = await api.get('/rates', { timeout: 20000 }); // 20 second timeout for initial load
+      const response = await api.get('/rates', { timeout: 5000 }); // 5 seconds - backend cache returns instantly
       if (response.data && Array.isArray(response.data)) {
         setRates(response.data);
         setLastUpdateTime(new Date());
