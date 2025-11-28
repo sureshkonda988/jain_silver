@@ -87,13 +87,20 @@ if (!platform || !platform.isVercel) {
 // Middleware - CORS configuration
 app.use(cors({
   origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  credentials: false
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Content-Length'],
+  exposedHeaders: ['Content-Length', 'Content-Type'],
+  credentials: false,
+  maxAge: 86400 // 24 hours
 }));
 
-// Handle preflight requests
-app.options('*', cors());
+// Handle preflight requests explicitly
+app.options('*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Content-Length');
+  res.sendStatus(204);
+});
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -228,11 +235,16 @@ routeNames.forEach(routeName => {
   }
 });
 
-// Add a catch-all for unregistered routes to help debug
-app.use('/api/*', (req, res, next) => {
+// Add a catch-all for unregistered routes to help debug (only if route not found)
+app.use('/api/*', (req, res) => {
   console.log(`⚠️  Unhandled API route: ${req.method} ${req.path}`);
   console.log(`   Available routes: /api/auth, /api/users, /api/admin, /api/rates, /api/store`);
-  next();
+  res.status(404).json({
+    error: 'Route not found',
+    method: req.method,
+    path: req.path,
+    availableRoutes: ['/api/auth', '/api/users', '/api/admin', '/api/rates', '/api/store']
+  });
 });
 
 // Socket.io for real-time updates (only if enabled for platform)

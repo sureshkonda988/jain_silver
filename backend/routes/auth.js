@@ -113,6 +113,27 @@ const generateToken = (userId) => {
   });
 };
 
+// Register new user - GET handler (for testing/info)
+router.get('/register', (req, res) => {
+  res.status(405).json({
+    message: 'Method not allowed',
+    error: 'Use POST method to register',
+    endpoint: 'POST /api/auth/register',
+    requiredFields: {
+      name: 'string',
+      email: 'string (valid email)',
+      phone: 'string (10-digit Indian phone number)',
+      password: 'string (min 6 characters)',
+      aadharNumber: 'string',
+      panNumber: 'string',
+      aadharFront: 'file (image)',
+      aadharBack: 'file (image)',
+      panImage: 'file (image)'
+    },
+    contentType: 'multipart/form-data'
+  });
+});
+
 // Register new user - POST handler
 router.post('/register',
   (req, res, next) => {
@@ -124,10 +145,18 @@ router.post('/register',
       contentType: req.headers['content-type'],
       contentLength: req.headers['content-length'],
       origin: req.headers['origin'],
-      userAgent: req.headers['user-agent']?.substring(0, 80)
+      userAgent: req.headers['user-agent']?.substring(0, 80),
+      host: req.headers['host'],
+      timestamp: new Date().toISOString()
     });
     console.log('📦 Request body keys:', Object.keys(req.body || {}));
     console.log('📎 Request files:', req.files ? Object.keys(req.files) : 'No files yet');
+    
+    // Log if content-type is missing or incorrect
+    if (!req.headers['content-type'] || !req.headers['content-type'].includes('multipart/form-data')) {
+      console.warn('⚠️  Content-Type might be incorrect:', req.headers['content-type']);
+    }
+    
     next();
   }, 
   (req, res, next) => {
@@ -142,16 +171,16 @@ router.post('/register',
       { name: 'panImage', maxCount: 1 }
     ]);
     
-    // Add timeout to multer processing
+    // Add timeout to multer processing (increased for large files)
     const timeout = setTimeout(() => {
-      console.error('❌ Multer processing timeout after 20 seconds');
+      console.error('❌ Multer processing timeout after 60 seconds');
       if (!res.headersSent) {
         return res.status(408).json({ 
           message: 'Request timeout - file upload took too long',
           error: 'Please try again with smaller files or check your connection'
         });
       }
-    }, 20000); // 20 second timeout for multer
+    }, 60000); // 60 second timeout for multer (increased from 20s)
     
     uploadMiddleware(req, res, (err) => {
       clearTimeout(timeout);
@@ -159,6 +188,7 @@ router.post('/register',
         console.error('❌ File upload error:', err);
         console.error('Error code:', err.code);
         console.error('Error message:', err.message);
+        console.error('Error stack:', err.stack);
         if (err.code === 'LIMIT_FILE_SIZE') {
           return res.status(400).json({ message: 'File size too large. Maximum 5MB allowed per file.' });
         }
@@ -168,6 +198,12 @@ router.post('/register',
         if (err.message && err.message.includes('Only images')) {
           return res.status(400).json({ message: 'Only image files (JPEG, PNG) are allowed.' });
         }
+        if (err.code === 'ECONNRESET' || err.message?.includes('ECONNRESET')) {
+          return res.status(408).json({ 
+            message: 'Connection reset during file upload', 
+            error: 'Please try again. The connection was interrupted during upload.'
+          });
+        }
         return res.status(400).json({ 
           message: 'File upload error', 
           error: err.message,
@@ -176,6 +212,12 @@ router.post('/register',
       }
       console.log('✅ Multer processing completed');
       console.log('Files received:', req.files ? Object.keys(req.files) : 'No files');
+      if (req.files) {
+        Object.keys(req.files).forEach(key => {
+          const file = Array.isArray(req.files[key]) ? req.files[key][0] : req.files[key];
+          console.log(`  - ${key}: ${file?.size || 0} bytes, ${file?.mimetype || 'unknown type'}`);
+        });
+      }
       next();
     });
   },
@@ -188,14 +230,14 @@ router.post('/register',
         
         // Use the middleware function with timeout
         const s3UploadTimeout = setTimeout(() => {
-          console.error('❌ S3 upload timeout after 30 seconds');
+          console.error('❌ S3 upload timeout after 60 seconds');
           if (!res.headersSent) {
             return res.status(408).json({
               message: 'Request timeout - S3 upload took too long',
               error: 'Please try again or check your AWS S3 configuration.'
             });
           }
-        }, 30000); // 30 second timeout for S3 uploads
+        }, 60000); // 60 second timeout for S3 uploads (increased from 30s)
 
         // Call the middleware function
         await multerS3.uploadToS3Middleware(req, res, () => {
