@@ -19,7 +19,8 @@ const uploadToS3 = async (fileBuffer, fileName, folder = 'documents', contentTyp
       Key: key,
       Body: fileBuffer,
       ContentType: contentType,
-      ACL: 'public-read', // Make files publicly accessible
+      // Note: ACL removed - bucket has ACLs disabled (modern AWS security best practice)
+      // Files are accessed via CloudFront which has proper IAM permissions
     });
 
     await s3Client.send(command);
