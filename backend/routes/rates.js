@@ -59,15 +59,15 @@ router.get('/', async (req, res) => {
       
       console.log(`✅ Fetched live rate: ₹${liveRate.ratePerGram}/gram (₹${liveRate.ratePerKg}/kg) from ${liveRate.source}`);
       
-      // Get rates from MongoDB first (faster with lean())
-      const rates = await SilverRate.find({ location: 'Andhra Pradesh' }).sort({ type: 1, 'weight.value': 1 }).lean();
+      // Get rates from MongoDB (need full documents for manualAdjustment)
+      const allRates = await SilverRate.find({ location: 'Andhra Pradesh' }).sort({ type: 1, 'weight.value': 1 });
       const baseRatePerGram = liveRate.ratePerGram;
       let updatedCount = 0;
       
       // Batch update operations for better performance
       const updatePromises = [];
       
-      for (const rate of rates) {
+      for (const rate of allRates) {
         if (!rate.weight || !rate.weight.value) continue;
         
         // Calculate rate per gram based on purity
@@ -79,7 +79,7 @@ router.get('/', async (req, res) => {
         }
         
         // Apply manual adjustment if exists (can be negative for decrease)
-        const manualAdjustment = rate.manualAdjustment || 0;
+        const manualAdjustment = (rate.manualAdjustment !== undefined && rate.manualAdjustment !== null) ? rate.manualAdjustment : 0;
         ratePerGram = ratePerGram + manualAdjustment;
         ratePerGram = Math.max(0, Math.round(ratePerGram * 100) / 100); // Ensure non-negative
         
@@ -104,12 +104,10 @@ router.get('/', async (req, res) => {
             })
           );
           
-          // Update in-memory rate for response
-          rate.ratePerGram = ratePerGram;
-          rate.rate = totalRate;
-          rate.lastUpdated = new Date();
-          
           updatedCount++;
+        } else {
+          // Even if rate didn't change, ensure manualAdjustment is applied for response
+          rate.ratePerGram = ratePerGram;
         }
       }
       
@@ -120,6 +118,32 @@ router.get('/', async (req, res) => {
       }
       
       ratesUpdated = updatedCount > 0;
+      
+      // Convert rates to plain objects for response
+      const ratesToReturn = allRates.map(rate => {
+        const rateObj = rate.toObject ? rate.toObject() : rate;
+        // Ensure manualAdjustment is included
+        if (rate.manualAdjustment !== undefined) {
+          rateObj.manualAdjustment = rate.manualAdjustment;
+        }
+        return rateObj;
+      });
+      
+      // Add USD rate if available
+      if (liveRate && liveRate.usdInrRate) {
+        ratesToReturn.forEach(rate => {
+          rate.usdInrRate = liveRate.usdInrRate;
+        });
+      }
+      
+      // Add metadata about live rate fetch
+      if (liveRate) {
+        console.log(`📤 Returning ${ratesToReturn.length} rates (live rate: ₹${liveRate.ratePerGram}/gram from ${liveRate.source})`);
+      } else {
+        console.log(`📤 Returning ${ratesToReturn.length} rates from cache (live fetch failed)`);
+      }
+      
+      return res.json(ratesToReturn);
     } catch (rateFetchError) {
       console.error('❌ Error fetching live rates:', rateFetchError.message);
       console.error('  Stack:', rateFetchError.stack);
@@ -131,25 +155,21 @@ router.get('/', async (req, res) => {
       });
     }
     
-    // Return updated rates from MongoDB
-    const rates = await SilverRate.find({ location: 'Andhra Pradesh' }).sort({ type: 1, 'weight.value': 1 });
-    
     // Add USD rate if available
     if (liveRate && liveRate.usdInrRate) {
-      rates.forEach(rate => {
-        rate._doc = rate._doc || rate.toObject();
-        rate._doc.usdInrRate = liveRate.usdInrRate;
+      ratesToReturn.forEach(rate => {
+        rate.usdInrRate = liveRate.usdInrRate;
       });
     }
     
     // Add metadata about live rate fetch
     if (liveRate) {
-      console.log(`📤 Returning ${rates.length} rates (live rate: ₹${liveRate.ratePerGram}/gram from ${liveRate.source})`);
+      console.log(`📤 Returning ${ratesToReturn.length} rates (live rate: ₹${liveRate.ratePerGram}/gram from ${liveRate.source})`);
     } else {
-      console.log(`📤 Returning ${rates.length} rates from cache (live fetch failed)`);
+      console.log(`📤 Returning ${ratesToReturn.length} rates from cache (live fetch failed)`);
     }
     
-    res.json(rates);
+    res.json(ratesToReturn);
   } catch (error) {
     console.error('Get rates error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
