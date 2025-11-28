@@ -30,6 +30,8 @@ const updateRatesFromEndpoints = async () => {
   
   lastUpdateAttempt = now;
   
+  console.log('📡 Fetching rates from endpoints...');
+  
   try {
     const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
     
@@ -37,9 +39,15 @@ const updateRatesFromEndpoints = async () => {
     const liveRate = await Promise.race([
       fetchSilverRatesFromMultipleSources(),
       new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout')), 8000) // 8s timeout
+        setTimeout(() => reject(new Error('Timeout after 8 seconds')), 8000) // 8s timeout
       )
     ]);
+
+    console.log('📊 Fetch result:', liveRate ? {
+      ratePerGram: liveRate.ratePerGram,
+      source: liveRate.source,
+      hasRatePerGram: !!liveRate.ratePerGram
+    } : 'null');
 
     if (liveRate && liveRate.ratePerGram && liveRate.ratePerGram > 0) {
       const oldRate = cachedBaseRate.ratePerGram;
@@ -51,10 +59,8 @@ const updateRatesFromEndpoints = async () => {
         usdInrRate: liveRate.usdInrRate || 89.25
       };
       
-      // Log rate changes
-      if (Math.abs(oldRate - liveRate.ratePerGram) > 0.01) {
-        console.log(`✅ Rate updated: ₹${oldRate.toFixed(2)} → ₹${liveRate.ratePerGram.toFixed(2)}/gram (${liveRate.source || 'live'})`);
-      }
+      // Always log updates
+      console.log(`✅ Rate updated: ₹${oldRate.toFixed(2)} → ₹${liveRate.ratePerGram.toFixed(2)}/gram (${liveRate.source || 'live'})`);
       
       // Update MongoDB immediately (await to ensure it completes)
       try {
@@ -66,9 +72,10 @@ const updateRatesFromEndpoints = async () => {
       console.warn('⚠️ Invalid rate received:', liveRate);
     }
   } catch (error) {
-    // Log errors occasionally
-    if (Math.random() < 0.05) { // Log 5% of failures
-      console.warn('⚠️ Rate fetch failed:', error.message);
+    // Always log errors to debug
+    console.error('❌ Rate fetch failed:', error.message);
+    if (error.stack) {
+      console.error('  Stack:', error.stack.substring(0, 500));
     }
   }
 };
@@ -177,7 +184,9 @@ router.get('/', async (req, res) => {
     
     // ALWAYS try to update rates (non-blocking, returns cache immediately)
     // This ensures rates update every second on Vercel (serverless)
-    updateRatesFromEndpoints().catch(() => {});
+    updateRatesFromEndpoints().catch((err) => {
+      console.error('❌ Update failed in GET handler:', err.message);
+    });
     
     // Use cached rate for FAST response (always returns immediately)
     const baseRatePerGram = cachedBaseRate.ratePerGram;

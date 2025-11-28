@@ -12,6 +12,7 @@ const { RATE_SOURCES, ACTIVE_RATE_SOURCE } = require('../config/rateSource');
 // Example: 2966	Silver 999 	-	166685	168779	165330	InStock
 const fetchFromRBGoldspot = async () => {
   try {
+    console.log('📡 Fetching from RB Goldspot...');
     // Always fetch fresh data - no caching
     const response = await axios.get('https://bcast.rbgoldspot.com:7768/VOTSBroadcastStreaming/Services/xml/GetLiveRateByTemplateID/rbgold', {
       headers: {
@@ -34,7 +35,7 @@ const fetchFromRBGoldspot = async () => {
       }
     });
 
-    console.log('✅ Received response from RB Goldspot');
+    console.log('✅ Received response from RB Goldspot (status:', response.status, ')');
     console.log('Response preview:', response.data?.substring(0, 300) || 'No data');
 
     // Parse tab-separated format
@@ -129,6 +130,8 @@ const fetchFromRBGoldspot = async () => {
     console.warn('⚠️ Could not extract valid rate from RB Goldspot response');
     console.warn('  Parsed lines:', lines.length);
     console.warn('  Silver 999 data:', silver999Data);
+    console.warn('  ratePerGram:', ratePerGram);
+    console.warn('  ratePerKg:', ratePerKg);
     return null;
   } catch (error) {
     console.error('❌ Error fetching from RB Goldspot:', error.message);
@@ -146,6 +149,7 @@ const fetchFromRBGoldspot = async () => {
 // Fetch from Vercel (SSE format) - Secondary source for live rates
 const fetchFromVercel = async () => {
   try {
+    console.log('📡 Fetching from Vercel stream...');
     // Always fetch fresh data - no caching
     const response = await axios.get('https://jainsilverpp1.vercel.app/prices/stream', {
       headers: {
