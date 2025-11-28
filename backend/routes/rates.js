@@ -4,13 +4,14 @@ const SilverRate = require('../models/SilverRate');
 const auth = require('../middleware/auth');
 
 // Get all silver rates (allow without auth for public viewing, but auth recommended)
-// Fetches live rates from jainsilverpp1.vercel.app/prices/stream and updates MongoDB
+// Fetches live rates from RB Goldspot API every second and updates MongoDB
 router.get('/', async (req, res) => {
+  let allRates = [];
+  
   try {
     // Ensure MongoDB connection
     const mongoose = require('mongoose');
     if (mongoose.connection.readyState !== 1) {
-      // Try to connect
       try {
         await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/jain_silver', {
           useNewUrlParser: true,
@@ -18,174 +19,107 @@ router.get('/', async (req, res) => {
           serverSelectionTimeoutMS: 5000,
         });
       } catch (connError) {
-        console.error('MongoDB connection failed:', connError);
-        return res.status(503).json({ 
-          message: 'Database connection unavailable', 
-          error: 'Service temporarily unavailable' 
-        });
+        console.error('MongoDB connection failed:', connError.message);
+        // Continue - will try to return cached rates or empty array
       }
     }
 
     // Try to get user from auth if token is provided, but don't require it
-    let user = null;
     try {
       const token = req.headers.authorization?.replace('Bearer ', '');
       if (token) {
         const jwt = require('jsonwebtoken');
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'jain_silver_secret_key_2024_change_in_production');
-        // User is authenticated, but we'll still return rates
-        user = decoded;
+        jwt.verify(token, process.env.JWT_SECRET || 'jain_silver_secret_key_2024_change_in_production');
       }
     } catch (authError) {
-      // No valid token, but we'll still return rates for public viewing
+      // No valid token - continue without auth
     }
     
-    // Fetch live rates EVERY SECOND - always fetch fresh data
+    // Get rates from MongoDB first (always return something)
+    try {
+      allRates = await SilverRate.find({ location: 'Andhra Pradesh' }).sort({ type: 1, 'weight.value': 1 }).lean();
+    } catch (dbError) {
+      console.error('Error fetching rates from DB:', dbError.message);
+      allRates = []; // Empty array if DB fails
+    }
+    
+    // Fetch live rates EVERY SECOND - always fetch fresh data (non-blocking)
     let liveRate = null;
     try {
-      // Always fetch fresh data - no caching for real-time updates
       const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
       
-      // Fetch live rates with aggressive timeout for real-time updates (every second)
-      // Use Promise.race to ensure we don't wait too long
+      // Fetch with timeout - don't wait too long
       liveRate = await Promise.race([
         fetchSilverRatesFromMultipleSources(),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('RB Goldspot API timeout')), 5000) // 5 seconds max
+          setTimeout(() => reject(new Error('Timeout')), 5000)
         )
       ]);
     } catch (fetchError) {
-      // If fetch fails, continue with null - will use cached rates
-      // Don't log errors to avoid spam (happens frequently with 1-second polling)
+      // Fetch failed - use cached rates
       liveRate = null;
     }
+    
+    // If we have a live rate, update all rates in memory
+    if (liveRate && liveRate.ratePerGram && liveRate.ratePerGram > 0) {
+      const baseRatePerGram = liveRate.ratePerGram;
       
-      if (!liveRate || !liveRate.ratePerGram || liveRate.ratePerGram <= 0) {
-        console.warn('⚠️ Failed to fetch live rate, will use cached rates if available');
-        // Don't return error immediately - try to return cached rates below
-      } else {
-        console.log(`✅ Fetched live rate: ₹${liveRate.ratePerGram}/gram (₹${liveRate.ratePerKg}/kg) from ${liveRate.source}`);
-      }
-      
-      // Get rates from MongoDB (need full documents for manualAdjustment)
-      const allRates = await SilverRate.find({ location: 'Andhra Pradesh' }).sort({ type: 1, 'weight.value': 1 });
-      
-      // If we have a live rate, update all rates
-      if (liveRate && liveRate.ratePerGram && liveRate.ratePerGram > 0) {
-        const baseRatePerGram = liveRate.ratePerGram;
-        let updatedCount = 0;
+      // Update rates in memory immediately (for fast response)
+      allRates = allRates.map(rate => {
+        if (!rate.weight || !rate.weight.value) return rate;
         
-        // Batch update operations for better performance
-        const updatePromises = [];
-        
-        for (const rate of allRates) {
-          if (!rate.weight || !rate.weight.value) continue;
-          
-          // Calculate rate per gram based on purity
-          let ratePerGram = baseRatePerGram;
-          if (rate.purity === '92.5%') {
-            ratePerGram = baseRatePerGram * 0.96;
-          } else if (rate.purity === '99.99%') {
-            ratePerGram = baseRatePerGram * 1.005;
-          }
-          
-          // Apply manual adjustment if exists (can be negative for decrease)
-          const manualAdjustment = (rate.manualAdjustment !== undefined && rate.manualAdjustment !== null) ? rate.manualAdjustment : 0;
-          ratePerGram = ratePerGram + manualAdjustment;
-          ratePerGram = Math.max(0, Math.round(ratePerGram * 100) / 100); // Ensure non-negative
-          
-          // Always update to ensure live rates (update in memory immediately for response)
-          // Calculate total rate based on weight
-          let weightInGrams = rate.weight.value;
-          if (rate.weight.unit === 'kg') {
-            weightInGrams = rate.weight.value * 1000;
-          } else if (rate.weight.unit === 'oz') {
-            weightInGrams = rate.weight.value * 28.35;
-          }
-          
-          const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
-          
-          // Update in memory immediately for response (don't wait for DB)
-          rate.ratePerGram = ratePerGram;
-          rate.rate = totalRate;
-          rate.lastUpdated = new Date();
-          
-          // Also update in database (async, don't block response)
-          updatePromises.push(
-            SilverRate.findByIdAndUpdate(rate._id, {
-              ratePerGram: ratePerGram,
-              rate: totalRate,
-              lastUpdated: new Date()
-            })
-          );
-          
-          updatedCount++;
+        // Calculate rate per gram based on purity
+        let ratePerGram = baseRatePerGram;
+        if (rate.purity === '92.5%') {
+          ratePerGram = baseRatePerGram * 0.96;
+        } else if (rate.purity === '99.99%') {
+          ratePerGram = baseRatePerGram * 1.005;
         }
         
-        // Execute all updates in parallel (don't await - return immediately with updated in-memory rates)
-        if (updatePromises.length > 0) {
-          Promise.all(updatePromises).then(() => {
-            console.log(`✅ Updated ${updatedCount} rates in database with live data`);
-          }).catch(err => {
-            console.error('❌ Error updating rates in database:', err.message);
-          });
+        // Apply manual adjustment
+        const manualAdjustment = (rate.manualAdjustment !== undefined && rate.manualAdjustment !== null) ? rate.manualAdjustment : 0;
+        ratePerGram = ratePerGram + manualAdjustment;
+        ratePerGram = Math.max(0, Math.round(ratePerGram * 100) / 100);
+        
+        // Calculate total rate
+        let weightInGrams = rate.weight.value;
+        if (rate.weight.unit === 'kg') {
+          weightInGrams = rate.weight.value * 1000;
+        } else if (rate.weight.unit === 'oz') {
+          weightInGrams = rate.weight.value * 28.35;
         }
         
-        ratesUpdated = updatedCount > 0;
-      } else {
-        console.warn('⚠️ No live rate available, using existing rates from database');
-      }
-      
-      // Convert rates to plain objects for response
-      const ratesToReturn = allRates.map(rate => {
-        const rateObj = rate.toObject ? rate.toObject() : rate;
-        // Ensure manualAdjustment is included
-        if (rate.manualAdjustment !== undefined) {
-          rateObj.manualAdjustment = rate.manualAdjustment;
-        }
-        return rateObj;
+        const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
+        
+        // Return updated rate object
+        return {
+          ...rate,
+          ratePerGram: ratePerGram,
+          rate: totalRate,
+          lastUpdated: new Date(),
+          usdInrRate: liveRate.usdInrRate || rate.usdInrRate
+        };
       });
       
-      // Add USD rate if available
-      if (liveRate && liveRate.usdInrRate) {
-        ratesToReturn.forEach(rate => {
-          rate.usdInrRate = liveRate.usdInrRate;
-        });
-      }
-      
-      // Add metadata about live rate fetch
-      if (liveRate) {
-        console.log(`📤 Returning ${ratesToReturn.length} rates (live rate: ₹${liveRate.ratePerGram}/gram from ${liveRate.source})`);
-      } else {
-        console.log(`📤 Returning ${ratesToReturn.length} rates from cache (live fetch failed)`);
-      }
-      
-      return res.json(ratesToReturn);
-    } catch (rateFetchError) {
-      console.error('❌ Error fetching live rates:', rateFetchError.message);
-      console.error('  Stack:', rateFetchError.stack);
-      
-      // Return cached rates if available (fallback for network issues)
-      try {
-        const cachedRates = await SilverRate.find({ location: 'Andhra Pradesh' }).sort({ type: 1, 'weight.value': 1 }).lean();
-        if (cachedRates && cachedRates.length > 0) {
-          console.warn('⚠️ Using cached rates due to live fetch error');
-          return res.json(cachedRates);
-        }
-      } catch (cacheError) {
-        console.error('❌ Error fetching cached rates:', cacheError.message);
-      }
-      
-      // If no cached rates, return error
-      return res.status(503).json({ 
-        message: 'Live rate service error', 
-        error: rateFetchError.message || 'Unable to fetch live rates. Please try again.',
-        retryAfter: 2
-      });
+      // Update database asynchronously (don't block response)
+      Promise.all(
+        allRates.map(rate => 
+          SilverRate.findByIdAndUpdate(rate._id, {
+            ratePerGram: rate.ratePerGram,
+            rate: rate.rate,
+            lastUpdated: rate.lastUpdated
+          }).catch(() => {})
+        )
+      ).catch(() => {});
     }
+    
+    // Always return rates (even if empty or cached)
+    return res.json(allRates || []);
+    
   } catch (error) {
-    console.error('Get rates error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    // Last resort - return whatever we have or empty array
+    console.error('Get rates error:', error.message);
+    return res.json(allRates || []);
   }
 });
 
