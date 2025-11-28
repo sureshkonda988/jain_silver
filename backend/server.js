@@ -494,23 +494,37 @@ mongoose.connection.once('open', async () => {
       console.error('❌ Error initializing store info:', storeError.message || storeError);
     }
     
-    // Start rate updater (only if enabled for platform)
+    // Start background rate updater (works on all platforms including Vercel)
+    console.log('🔄 Starting background rate updater...');
+    try {
+      const ratesRouter = require('./routes/rates');
+      if (ratesRouter.startBackgroundRateUpdater) {
+        ratesRouter.startBackgroundRateUpdater();
+        console.log('✅ Background rate updater started (updates every second)');
+      } else {
+        console.log('⚠️  Background rate updater not available');
+      }
+    } catch (updaterError) {
+      console.error('❌ Error starting background rate updater:', updaterError.message || updaterError);
+    }
+    
+    // Start rate updater (only if enabled for platform - legacy)
     if (serverConfig && serverConfig.enableRateUpdater) {
-      console.log('🔄 Starting rate updater...');
+      console.log('🔄 Starting legacy rate updater...');
       try {
         const { startRateUpdater } = require('./utils/rateUpdater');
         const io = app.get('io');
         if (io) {
           startRateUpdater(io);
-          console.log('✅ Rate updater started (updates every second)');
+          console.log('✅ Legacy rate updater started (updates every second)');
         } else {
-          console.log('⚠️  Rate updater skipped (Socket.io not available)');
+          console.log('⚠️  Legacy rate updater skipped (Socket.io not available)');
         }
       } catch (updaterError) {
-        console.error('❌ Error starting rate updater:', updaterError.message || updaterError);
+        console.error('❌ Error starting legacy rate updater:', updaterError.message || updaterError);
       }
     } else {
-      console.log('⚠️  Rate updater disabled for serverless platform');
+      console.log('⚠️  Legacy rate updater disabled for serverless platform');
     }
     
     console.log('🎉 Server initialization completed successfully!');

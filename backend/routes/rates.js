@@ -1,13 +1,141 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
+const SilverRate = require('../models/SilverRate');
 
 // In-memory store for manual adjustments (per rate type)
 // Format: { "Silver Coin 1 Gram": { manualAdjustment: 0, ... }, ... }
 // Exported so admin.js can access it
 let manualAdjustments = {};
 
-// Get all silver rates - NO MongoDB, fetch directly from endpoints and calculate on-the-fly
+// Cache for live base rate (updated in background)
+let cachedBaseRate = {
+  ratePerGram: 169.0, // Default fallback rate
+  ratePerKg: 169000,
+  source: 'cache',
+  lastUpdated: new Date(),
+  usdInrRate: 89.25
+};
+
+// Background rate updater - updates cache every second
+let backgroundUpdateInterval = null;
+
+// Start background rate updater
+const startBackgroundRateUpdater = () => {
+  if (backgroundUpdateInterval) {
+    return; // Already running
+  }
+
+  console.log('🔄 Starting background rate updater...');
+  
+  // Update immediately
+  updateRatesInBackground();
+  
+  // Then update every second
+  backgroundUpdateInterval = setInterval(() => {
+    updateRatesInBackground();
+  }, 1000);
+};
+
+// Update rates in background (non-blocking)
+const updateRatesInBackground = async () => {
+  try {
+    const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
+    
+    // Fetch with shorter timeout for background updates
+    const liveRate = await Promise.race([
+      fetchSilverRatesFromMultipleSources(),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Background timeout')), 5000) // 5s for background
+      )
+    ]);
+
+    if (liveRate && liveRate.ratePerGram && liveRate.ratePerGram > 0) {
+      cachedBaseRate = {
+        ratePerGram: liveRate.ratePerGram,
+        ratePerKg: liveRate.ratePerKg || (liveRate.ratePerGram * 1000),
+        source: liveRate.source || 'live',
+        lastUpdated: new Date(),
+        usdInrRate: liveRate.usdInrRate || 89.25
+      };
+      
+      // Update MongoDB in background (don't block)
+      updateMongoDBRates(liveRate).catch(() => {});
+    }
+  } catch (error) {
+    // Silently fail in background - use cached rate
+    if (Math.random() < 0.01) { // Log 1% of failures to avoid spam
+      console.warn('⚠️ Background rate update failed, using cache:', error.message);
+    }
+  }
+};
+
+// Update MongoDB rates (async, non-blocking)
+const updateMongoDBRates = async (liveRate) => {
+  try {
+    const mongoose = require('mongoose');
+    if (mongoose.connection.readyState !== 1) {
+      return; // Skip if not connected
+    }
+
+    const baseRatePerGram = liveRate.ratePerGram;
+    const rateDefinitions = [
+      { name: 'Silver Coin 1 Gram', type: 'coin', weight: { value: 1, unit: 'grams' }, purity: '99.9%' },
+      { name: 'Silver Coin 5 Grams', type: 'coin', weight: { value: 5, unit: 'grams' }, purity: '99.9%' },
+      { name: 'Silver Coin 10 Grams', type: 'coin', weight: { value: 10, unit: 'grams' }, purity: '99.9%' },
+      { name: 'Silver Coin 50 Grams', type: 'coin', weight: { value: 50, unit: 'grams' }, purity: '99.9%' },
+      { name: 'Silver Coin 100 Grams', type: 'coin', weight: { value: 100, unit: 'grams' }, purity: '99.9%' },
+      { name: 'Silver Bar 100 Grams', type: 'bar', weight: { value: 100, unit: 'grams' }, purity: '99.99%' },
+      { name: 'Silver Bar 500 Grams', type: 'bar', weight: { value: 500, unit: 'grams' }, purity: '99.99%' },
+      { name: 'Silver Bar 1 Kg', type: 'bar', weight: { value: 1, unit: 'kg' }, purity: '99.99%' },
+      { name: 'Silver Jewelry 92.5%', type: 'jewelry', weight: { value: 1, unit: 'grams' }, purity: '92.5%' },
+      { name: 'Silver Jewelry 99.9%', type: 'jewelry', weight: { value: 1, unit: 'grams' }, purity: '99.9%' }
+    ];
+
+    for (const rateDef of rateDefinitions) {
+      let ratePerGram = baseRatePerGram;
+      if (rateDef.purity === '92.5%') {
+        ratePerGram = baseRatePerGram * 0.96;
+      } else if (rateDef.purity === '99.99%') {
+        ratePerGram = baseRatePerGram * 1.005;
+      }
+
+      const manualAdjustment = manualAdjustments[rateDef.name]?.manualAdjustment || 0;
+      ratePerGram = ratePerGram + manualAdjustment;
+      ratePerGram = Math.max(0, Math.round(ratePerGram * 100) / 100);
+
+      let weightInGrams = rateDef.weight.value;
+      if (rateDef.weight.unit === 'kg') {
+        weightInGrams = rateDef.weight.value * 1000;
+      } else if (rateDef.weight.unit === 'oz') {
+        weightInGrams = rateDef.weight.value * 28.35;
+      }
+
+      const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
+
+      await SilverRate.findOneAndUpdate(
+        { name: rateDef.name, location: 'Andhra Pradesh' },
+        {
+          name: rateDef.name,
+          type: rateDef.type,
+          weight: rateDef.weight,
+          purity: rateDef.purity,
+          ratePerGram: ratePerGram,
+          rate: totalRate,
+          lastUpdated: new Date(),
+          location: 'Andhra Pradesh',
+          unit: 'INR',
+          manualAdjustment: manualAdjustment
+        },
+        { upsert: true, new: true }
+      ).catch(() => {});
+    }
+  } catch (error) {
+    // Silently fail - MongoDB update is optional
+  }
+};
+
+// Get all silver rates - FAST response using cache, updates in background
 router.get('/', async (req, res) => {
   try {
     // Try to get user from auth if token is provided, but don't require it
@@ -21,68 +149,16 @@ router.get('/', async (req, res) => {
       // No valid token - continue without auth
     }
     
-    // Fetch live rates EVERY SECOND - ONLY return LIVE rates from endpoints
-    let liveRate = null;
-    let fetchError = null;
-    try {
-      const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
-      
-      console.log('📡 Starting live rate fetch from endpoints...');
-      
-      // Fetch with timeout - MUST get live data every second
-      // Both RB Goldspot and Vercel sources are tried in parallel
-      // Use Promise.race with a timeout - Vercel allows 120s, so use 20s to give sources time
-      liveRate = await Promise.race([
-        fetchSilverRatesFromMultipleSources(),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout after 20 seconds')), 20000) // 20 seconds - enough time for both sources
-        )
-      ]);
-      
-      // Log successful fetch
-      if (liveRate && liveRate.ratePerGram) {
-        console.log(`✅ Successfully fetched live rate: ₹${liveRate.ratePerGram}/gram from ${liveRate.source || 'unknown'}`);
-      } else {
-        console.warn('⚠️ Fetch returned but rate is invalid:', liveRate);
-      }
-    } catch (error) {
-      // Live fetch failed - log detailed error
-      fetchError = error;
-      console.error('❌ Live rate fetch failed:', error.message);
-      console.error('  Error stack:', error.stack?.substring(0, 500));
-      if (error.code) {
-        console.error('  Error code:', error.code);
-      }
+    // Start background updater if not already running
+    if (!backgroundUpdateInterval) {
+      startBackgroundRateUpdater();
     }
     
-    // ONLY proceed if we have a valid live rate
-    if (!liveRate || !liveRate.ratePerGram || liveRate.ratePerGram <= 0) {
-      const errorDetails = {
-        liveRate: liveRate ? {
-          ratePerGram: liveRate.ratePerGram,
-          source: liveRate.source,
-          hasRatePerGram: !!liveRate.ratePerGram,
-          ratePerKg: liveRate.ratePerKg
-        } : 'null',
-        error: fetchError?.message || 'Invalid rate received',
-        timestamp: new Date().toISOString()
-      };
-      console.warn('⚠️ Invalid live rate received:', errorDetails);
-      
-      // Return error details in response for debugging
-      return res.status(503).json({ 
-        error: 'Live rate fetch failed',
-        message: fetchError?.message || 'Invalid rate received',
-        details: 'Unable to fetch rates from RB Goldspot or Vercel endpoints. Please try again.',
-        debug: errorDetails,
-        timestamp: new Date().toISOString()
-      });
-    }
-    
+    // Use cached rate for FAST response (always returns immediately)
+    const baseRatePerGram = cachedBaseRate.ratePerGram;
     const currentTime = new Date();
-    const baseRatePerGram = liveRate.ratePerGram; // Base rate for 99.9% purity
     
-    // Define all rate types - calculate on-the-fly from live rate
+    // Define all rate types - calculate on-the-fly from cached rate
     const rateDefinitions = [
       // Silver Coins (99.9% purity)
       { name: 'Silver Coin 1 Gram', type: 'coin', weight: { value: 1, unit: 'grams' }, purity: '99.9%' },
@@ -101,7 +177,7 @@ router.get('/', async (req, res) => {
       { name: 'Silver Jewelry 99.9%', type: 'jewelry', weight: { value: 1, unit: 'grams' }, purity: '99.9%' }
     ];
     
-    // Calculate all rates on-the-fly from live rate
+    // Calculate all rates on-the-fly from cached rate (FAST - no API calls)
     const allRates = rateDefinitions.map(rateDef => {
       // Calculate rate per gram based on purity
       let ratePerGram = baseRatePerGram;
@@ -129,25 +205,25 @@ router.get('/', async (req, res) => {
       // Generate a consistent ID based on name
       const id = Buffer.from(rateDef.name).toString('base64').substring(0, 24);
       
-      // Return calculated rate object with LIVE data
+      // Return calculated rate object with cached data (always fast)
       return {
         _id: id,
         name: rateDef.name,
         type: rateDef.type,
         weight: rateDef.weight,
         purity: rateDef.purity,
-        ratePerGram: ratePerGram, // LIVE rate calculated from endpoint
-        rate: totalRate, // LIVE total rate
-        lastUpdated: currentTime, // ALWAYS fresh timestamp
-        usdInrRate: liveRate.usdInrRate || 89.25,
-        source: liveRate.source || 'live', // Track data source
+        ratePerGram: ratePerGram, // Rate calculated from cached base rate
+        rate: totalRate, // Total rate
+        lastUpdated: currentTime, // ALWAYS current time (shows live updates)
+        usdInrRate: cachedBaseRate.usdInrRate,
+        source: cachedBaseRate.source, // Shows if from cache or live
         location: 'Andhra Pradesh',
         unit: 'INR',
         manualAdjustment: manualAdjustment // Include manual adjustment for reference
       };
     });
     
-    // Return ONLY live rates calculated from endpoints
+    // Return rates immediately (FAST - no waiting for API calls)
     return res.json(allRates || []);
     
   } catch (error) {
@@ -207,20 +283,39 @@ router.put('/:id', auth, async (req, res) => {
   }
 });
 
-// Force rate update (admin only) - no-op since we fetch live every time
+// Force rate update (admin only) - triggers immediate background update
 router.post('/force-update', auth, async (req, res) => {
   try {
-    res.json({ message: 'Rates are fetched live from endpoints every second. No update needed.' });
+    updateRatesInBackground();
+    res.json({ message: 'Background rate update triggered. Rates will update shortly.' });
   } catch (error) {
     console.error('Force update error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
-// Initialize default rates - no-op since we calculate on-the-fly
+// Initialize default rates - loads from MongoDB or creates defaults
 router.post('/initialize', async (req, res) => {
   try {
-    res.json({ message: 'Rates are calculated live from endpoints. No initialization needed.' });
+    const mongoose = require('mongoose');
+    if (mongoose.connection.readyState === 1) {
+      // Try to load last known rate from MongoDB
+      const lastRate = await SilverRate.findOne({ location: 'Andhra Pradesh' }).sort({ lastUpdated: -1 });
+      if (lastRate && lastRate.ratePerGram) {
+        cachedBaseRate = {
+          ratePerGram: lastRate.ratePerGram,
+          ratePerKg: lastRate.ratePerGram * 1000,
+          source: 'mongodb',
+          lastUpdated: lastRate.lastUpdated || new Date(),
+          usdInrRate: 89.25
+        };
+      }
+    }
+    
+    // Start background updater
+    startBackgroundRateUpdater();
+    
+    res.json({ message: 'Rate system initialized. Background updater started.' });
   } catch (error) {
     console.error('Initialize rates error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -230,3 +325,4 @@ router.post('/initialize', async (req, res) => {
 // Export manualAdjustments so admin.js can modify them
 module.exports = router;
 module.exports.manualAdjustments = manualAdjustments;
+module.exports.startBackgroundRateUpdater = startBackgroundRateUpdater;
