@@ -171,8 +171,16 @@ router.get('/', async (req, res) => {
     }
     
     // Start background updater if not already running
+    // On Vercel (serverless), this might restart on each request, which is fine
     if (!backgroundUpdateInterval) {
       startBackgroundRateUpdater();
+    }
+    
+    // Check if cache is stale (older than 2 seconds) and trigger update
+    const cacheAge = Date.now() - cachedBaseRate.lastUpdated.getTime();
+    if (cacheAge > 2000) {
+      // Cache is stale, trigger update (non-blocking)
+      updateRatesInBackground().catch(() => {});
     }
     
     // Use cached rate for FAST response (always returns immediately)
