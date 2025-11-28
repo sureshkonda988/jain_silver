@@ -494,13 +494,16 @@ mongoose.connection.once('open', async () => {
       console.error('❌ Error initializing store info:', storeError.message || storeError);
     }
     
-    // Initialize rates cache from MongoDB
+    // Initialize rates cache from MongoDB and trigger fetch
     console.log('💰 Loading rates from MongoDB...');
     try {
       const SilverRate = require('./models/SilverRate');
       const lastRate = await SilverRate.findOne({ location: 'Andhra Pradesh' }).sort({ lastUpdated: -1 });
+      
+      // Get rates router (already loaded, Node.js caches modules)
+      const ratesRouter = require('./routes/rates');
+      
       if (lastRate && lastRate.ratePerGram) {
-        const ratesRouter = require('./routes/rates');
         // Set the cached base rate using the setter
         if (ratesRouter.setCachedBaseRate) {
           ratesRouter.setCachedBaseRate({
@@ -511,25 +514,27 @@ mongoose.connection.once('open', async () => {
             usdInrRate: 89.25
           });
           console.log(`✅ Loaded rate from MongoDB: ₹${lastRate.ratePerGram}/gram`);
+        } else {
+          console.warn('⚠️ setCachedBaseRate function not available');
         }
       } else {
         console.log('⚠️ No rates found in MongoDB, will fetch from endpoints');
       }
-    } catch (rateLoadError) {
-      console.error('❌ Error loading rates from MongoDB:', rateLoadError.message);
-    }
-    
-    // Trigger immediate rate update on server start
-    console.log('🔄 Triggering initial rate fetch...');
-    try {
-      const ratesRouter = require('./routes/rates');
+      
+      // Trigger immediate rate update on server start
+      console.log('🔄 Triggering initial rate fetch...');
       if (ratesRouter.updateRatesFromEndpoints) {
         ratesRouter.updateRatesFromEndpoints().catch((err) => {
           console.error('❌ Initial rate fetch failed:', err.message);
         });
+      } else {
+        console.warn('⚠️ updateRatesFromEndpoints function not available');
       }
-    } catch (updaterError) {
-      console.error('❌ Error triggering initial rate fetch:', updaterError.message || updaterError);
+    } catch (rateLoadError) {
+      console.error('❌ Error initializing rates:', rateLoadError.message);
+      if (rateLoadError.stack) {
+        console.error('Stack:', rateLoadError.stack.substring(0, 500));
+      }
     }
     
     // Start rate updater (only if enabled for platform - legacy)
