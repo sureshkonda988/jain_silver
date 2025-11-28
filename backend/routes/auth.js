@@ -138,24 +138,44 @@ router.get('/register', (req, res) => {
 router.post('/register',
   (req, res, next) => {
     console.log('✅ POST /api/auth/register - Registration request received');
+    const contentLength = req.headers['content-length'];
+    const contentType = req.headers['content-type'] || '';
+    
     console.log('📋 Request details:', {
       method: req.method,
       path: req.path,
       url: req.url,
-      contentType: req.headers['content-type'],
-      contentLength: req.headers['content-length'],
+      contentType: contentType,
+      contentLength: contentLength ? `${(parseInt(contentLength) / 1024 / 1024).toFixed(2)}MB` : 'unknown',
       origin: req.headers['origin'],
       userAgent: req.headers['user-agent']?.substring(0, 80),
       host: req.headers['host'],
       timestamp: new Date().toISOString()
     });
+    
+    // Check content type
+    if (!contentType.includes('multipart/form-data')) {
+      console.error('❌ Invalid Content-Type for file upload:', contentType);
+      return res.status(400).json({
+        message: 'Invalid Content-Type',
+        error: 'Request must be multipart/form-data for file uploads',
+        received: contentType
+      });
+    }
+    
+    // Check request size
+    if (contentLength && parseInt(contentLength) > 4.5 * 1024 * 1024) {
+      console.error('❌ Request too large:', `${(parseInt(contentLength) / 1024 / 1024).toFixed(2)}MB`);
+      return res.status(413).json({
+        message: 'Request too large',
+        error: 'Total file size exceeds 4.5MB limit. Please compress images.',
+        maxSize: '4.5MB',
+        receivedSize: `${(parseInt(contentLength) / 1024 / 1024).toFixed(2)}MB`
+      });
+    }
+    
     console.log('📦 Request body keys:', Object.keys(req.body || {}));
     console.log('📎 Request files:', req.files ? Object.keys(req.files) : 'No files yet');
-    
-    // Log if content-type is missing or incorrect
-    if (!req.headers['content-type'] || !req.headers['content-type'].includes('multipart/form-data')) {
-      console.warn('⚠️  Content-Type might be incorrect:', req.headers['content-type']);
-    }
     
     next();
   }, 

@@ -106,10 +106,29 @@ app.options('*', (req, res) => {
 // DO NOT parse multipart/form-data - multer will handle it
 app.use((req, res, next) => {
   const contentType = req.headers['content-type'] || '';
+  const contentLength = req.headers['content-length'];
   
-  // Skip body parsing for multipart/form-data - multer needs the raw stream
+  // Log request details for debugging
   if (contentType.includes('multipart/form-data')) {
-    console.log('📎 Skipping body parsing for multipart/form-data - multer will handle it');
+    console.log('📎 Multipart request detected:', {
+      contentType,
+      contentLength: contentLength ? `${(parseInt(contentLength) / 1024 / 1024).toFixed(2)}MB` : 'unknown',
+      method: req.method,
+      path: req.path
+    });
+    
+    // Check if request is too large (Vercel has 4.5MB limit on Hobby plan)
+    if (contentLength && parseInt(contentLength) > 4.5 * 1024 * 1024) {
+      console.warn('⚠️  Request body size exceeds Vercel limit (4.5MB)');
+      return res.status(413).json({
+        message: 'Request too large',
+        error: 'Total file size exceeds 4.5MB limit. Please compress images or reduce file size.',
+        maxSize: '4.5MB',
+        receivedSize: `${(parseInt(contentLength) / 1024 / 1024).toFixed(2)}MB`
+      });
+    }
+    
+    // Skip body parsing for multipart/form-data - multer needs the raw stream
     return next();
   }
   
@@ -241,6 +260,29 @@ routeNames.forEach(routeName => {
   if (!loaded) {
     console.error(`⚠️  Route /api/${routeName} failed to load - server may have issues`);
   }
+});
+
+// Global error handler - must be after all routes
+app.use((err, req, res, next) => {
+  console.error('❌ Global error handler:', err.message);
+  console.error('Error stack:', err.stack);
+  console.error('Request details:', {
+    method: req.method,
+    path: req.path,
+    contentType: req.headers['content-type'],
+    contentLength: req.headers['content-length']
+  });
+  
+  // Don't send error if response already sent
+  if (res.headersSent) {
+    return next(err);
+  }
+  
+  res.status(err.status || 500).json({
+    message: err.message || 'Internal server error',
+    error: process.env.NODE_ENV === 'development' ? err.message : 'An error occurred',
+    ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {})
+  });
 });
 
 // Add a catch-all for unregistered routes to help debug (only if route not found)
