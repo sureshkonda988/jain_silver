@@ -296,11 +296,18 @@ router.get('/', async (req, res) => {
           
           const mongoAge = Date.now() - new Date(latestRate.lastUpdated).getTime();
           const STALE_THRESHOLD = 1000; // 1 second - update every second for live rates
-          const VERY_STALE_THRESHOLD = 60000; // 1 minute - if very stale, wait for update before serving
+          const VERY_STALE_THRESHOLD = 3000; // 3 seconds - if very stale, wait for update before serving
+          const OLD_RATE_THRESHOLD = 170; // If rate is below this, it's likely old cached data
           
-          // If rates are very stale (older than 1 minute), wait for update before serving
-          if (mongoAge > VERY_STALE_THRESHOLD) {
-            console.log(`⚠️ Rates are VERY stale (${Math.round(mongoAge/1000)}s old), updating before serving...`);
+          // Check if rates are old cached data (99.9% should be ~₹176-177, not ₹169)
+          const isOldCachedData = latestRate.purity === '99.9%' && latestRate.ratePerGram < OLD_RATE_THRESHOLD;
+          
+          // If rates are very stale OR old cached data, wait for update before serving
+          if (mongoAge > VERY_STALE_THRESHOLD || isOldCachedData) {
+            const reason = isOldCachedData 
+              ? `old cached data (₹${latestRate.ratePerGram}/gram for 99.9%, expected ~₹176-177)`
+              : `very stale (${Math.round(mongoAge/1000)}s old)`;
+            console.log(`⚠️ Rates are ${reason}, updating before serving...`);
             try {
               await updateRatesHandler(req, null); // Wait for update
               // Fetch fresh rates after update
@@ -308,6 +315,12 @@ router.get('/', async (req, res) => {
                 .sort({ name: 1 })
                 .lean();
               if (freshRates && freshRates.length > 0) {
+                const freshLatest = freshRates.reduce((latest, rate) => {
+                  return rate.lastUpdated > latest.lastUpdated ? rate : latest;
+                }, freshRates[0]);
+                const freshAge = Date.now() - new Date(freshLatest.lastUpdated).getTime();
+                console.log(`✅ Fresh rates loaded: ${freshRates.length} rates (${Math.round(freshAge/1000)}s old, latest: ${freshLatest.name} = ₹${freshLatest.ratePerGram}/gram)`);
+                
                 const ratesWithUSD = freshRates.map(rate => ({
                   ...rate,
                   usdInrRate: cachedBaseRate.usdInrRate || 89.25
@@ -320,8 +333,8 @@ router.get('/', async (req, res) => {
                 return res.json(ratesWithUSD);
               }
             } catch (updateErr) {
-              console.error('❌ Update failed for very stale rates:', updateErr.message);
-              // Fall through to serve stale rates
+              console.error('❌ Update failed for stale/old rates:', updateErr.message);
+              // Fall through to serve stale rates (better than nothing)
             }
           }
           
@@ -345,8 +358,12 @@ router.get('/', async (req, res) => {
           }
           
           // Warn if serving rates that seem too low (might be old cached rates)
-          if (latestRate.ratePerGram < 170) {
-            console.warn(`⚠️ WARNING: Serving rate (₹${latestRate.ratePerGram}/gram) seems too low! Expected ~₹176-177/gram. This might be old cached data.`);
+          if (latestRate.ratePerGram < OLD_RATE_THRESHOLD && latestRate.purity === '99.9%') {
+            console.warn(`⚠️ WARNING: Serving 99.9% rate (₹${latestRate.ratePerGram}/gram) seems too low! Expected ~₹176-177/gram. This is old cached data - triggering update...`);
+            // Trigger immediate update
+            updateRatesHandler(req, null).catch(err => {
+              console.error('❌ Immediate update failed:', err.message);
+            });
           }
           
           // Only log occasionally to avoid spam (every 10th request)
