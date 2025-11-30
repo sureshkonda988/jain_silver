@@ -34,34 +34,115 @@ function Layout() {
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <AppBar
         position="sticky"
+        elevation={0}
         sx={{
-          backgroundColor: colors.primaryDark,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          backgroundColor: '#ffffff',
+          borderBottom: `1px solid ${colors.divider}`,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
         }}
       >
-        <Toolbar>
-          <Avatar
-            src="/Gemini_Generated_Image_8ia19c8ia19c8ia1.png"
+        <Toolbar
+          sx={{
+            px: { xs: 2, sm: 3, md: 4 },
+            py: 1.5,
+            minHeight: { xs: 64, sm: 72 } !important,
+          }}
+        >
+          <Box
+            component="img"
+            src="/1764232687647-removebg-preview.png"
             alt="Jain Silver Plaza"
-            sx={{ width: 48, height: 48, mr: 2 }}
-          />
-          <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="h6" sx={{ fontWeight: 700, color: 'white' }}>
-              Jain Silver Plaza
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.8)' }}>
-              Welcome, {user?.name || 'User'}
-            </Typography>
-          </Box>
-          <Chip
-            label={user?.location || 'Andhra Pradesh'}
-            size="small"
             sx={{
-              backgroundColor: colors.primary,
-              color: 'white',
-              fontWeight: 600,
+              height: { xs: 50, sm: 60 },
+              width: 'auto',
+              mr: 2,
+              cursor: 'pointer',
+              objectFit: 'contain',
             }}
+            onClick={() => navigate('/')}
           />
+          <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center' }}>
+            <Box>
+              <Typography
+                variant="h6"
+                sx={{
+                  fontWeight: 700,
+                  color: colors.textPrimary,
+                  fontSize: { xs: '1.1rem', sm: '1.25rem' },
+                  lineHeight: 1.2,
+                  mb: 0.25,
+                }}
+              >
+                Jain Silver Plaza
+              </Typography>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: colors.textSecondary,
+                  fontSize: { xs: '0.7rem', sm: '0.75rem' },
+                  fontWeight: 500,
+                  display: { xs: 'none', sm: 'block' },
+                }}
+              >
+                Premium Silver Products | Pure 'N' Sure
+              </Typography>
+            </Box>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box
+              sx={{
+                display: { xs: 'none', sm: 'flex' },
+                flexDirection: 'column',
+                alignItems: 'flex-end',
+                mr: 1,
+              }}
+            >
+              <Typography
+                variant="body2"
+                sx={{
+                  color: colors.textPrimary,
+                  fontWeight: 600,
+                  fontSize: '0.875rem',
+                }}
+              >
+                {user?.name || 'User'}
+              </Typography>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: colors.textSecondary,
+                  fontSize: '0.7rem',
+                }}
+              >
+                Welcome back
+              </Typography>
+            </Box>
+            <Chip
+              icon={
+                <Box
+                  component="span"
+                  sx={{
+                    fontSize: '0.75rem',
+                    display: 'inline-block',
+                  }}
+                >
+                  📍
+                </Box>
+              }
+              label={user?.location || 'Andhra Pradesh'}
+              size="small"
+              sx={{
+                backgroundColor: colors.primaryVeryLight,
+                color: colors.primary,
+                fontWeight: 600,
+                fontSize: { xs: '0.7rem', sm: '0.75rem' },
+                height: { xs: 28, sm: 32 },
+                '& .MuiChip-label': {
+                  px: 1.5,
+                },
+              }}
+            />
+          </Box>
         </Toolbar>
       </AppBar>
 
