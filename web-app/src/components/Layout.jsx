@@ -45,7 +45,7 @@ function Layout() {
           sx={{
             px: { xs: 2, sm: 3, md: 4 },
             py: 1.5,
-            minHeight: { xs: 64, sm: 72 } !important,
+            minHeight: { xs: '64px !important', sm: '72px !important' },
           }}
         >
           <Box
