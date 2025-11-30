@@ -295,12 +295,12 @@ router.get('/', async (req, res) => {
           }, mongoRates[0]);
           
           const mongoAge = Date.now() - new Date(latestRate.lastUpdated).getTime();
-          const STALE_THRESHOLD = 10000; // 10 seconds - if older, trigger update (for live updates)
-          const VERY_STALE_THRESHOLD = 3600000; // 1 hour - if very stale, wait for update before serving
+          const STALE_THRESHOLD = 1000; // 1 second - update every second for live rates
+          const VERY_STALE_THRESHOLD = 60000; // 1 minute - if very stale, wait for update before serving
           
-          // If rates are very stale (older than 1 hour), wait for update before serving
+          // If rates are very stale (older than 1 minute), wait for update before serving
           if (mongoAge > VERY_STALE_THRESHOLD) {
-            console.log(`⚠️ Rates are VERY stale (${Math.round(mongoAge/3600000)}h old), updating before serving...`);
+            console.log(`⚠️ Rates are VERY stale (${Math.round(mongoAge/1000)}s old), updating before serving...`);
             try {
               await updateRatesHandler(req, null); // Wait for update
               // Fetch fresh rates after update
@@ -325,17 +325,26 @@ router.get('/', async (req, res) => {
             }
           }
           
-          // If rates are stale (older than 10 seconds), trigger update in background
+          // If rates are stale (older than 1 second), trigger update in background
+          // Since mobile app polls every second, this ensures rates update every second
           if (mongoAge > STALE_THRESHOLD) {
-            console.log(`⚠️ Rates are stale (${Math.round(mongoAge/1000)}s old), triggering live update...`);
+            // Only log occasionally to avoid spam (every 10th update)
+            if (Math.random() < 0.1) {
+              console.log(`🔄 Rates are stale (${Math.round(mongoAge/1000)}s old), triggering live update...`);
+            }
             // Trigger update in background (non-blocking) - this will fetch from RB Goldspot and update MongoDB
             updateRatesHandler(req, null).catch(err => {
-              console.error('❌ Background update failed:', err.message);
+              // Only log errors occasionally to avoid spam
+              if (Math.random() < 0.1) {
+                console.error('❌ Background update failed:', err.message);
+              }
             });
           }
           
-          // Log the age for debugging, but always serve from MongoDB
-          console.log(`📦 Serving ${mongoRates.length} rates from MongoDB (${Math.round(mongoAge/1000)}s old, latest: ${latestRate.name} = ₹${latestRate.ratePerGram}/gram)`);
+          // Only log occasionally to avoid spam (every 10th request)
+          if (Math.random() < 0.1) {
+            console.log(`📦 Serving ${mongoRates.length} rates from MongoDB (${Math.round(mongoAge/1000)}s old, latest: ${latestRate.name} = ₹${latestRate.ratePerGram}/gram)`);
+          }
           
           // Add USD rate to all rates if available
           const ratesWithUSD = mongoRates.map(rate => ({
@@ -528,7 +537,10 @@ router.post('/force-update', auth, async (req, res) => {
 const updateRatesHandler = async (req, res = null) => {
   const startTime = Date.now();
   try {
-    console.log('🔄 Cron job triggered: Updating rates...');
+    // Only log occasionally to avoid spam (every 10th update)
+    if (Math.random() < 0.1) {
+      console.log('🔄 Updating rates from live source...');
+    }
     
     // Import rate fetcher
     const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
@@ -553,9 +565,11 @@ const updateRatesHandler = async (req, res = null) => {
       return; // If no response object, just return silently
     }
 
-    // Log the fetched rate details
-    console.log(`📊 Fetched live rate: ₹${liveRate.ratePerGram.toFixed(2)}/gram (₹${liveRate.ratePerKg}/kg)`);
-    console.log(`📊 Source: ${liveRate.source}, Raw Ask: ${liveRate.rawData?.ask || 'N/A'}, Raw High: ${liveRate.rawData?.high || 'N/A'}`);
+    // Log the fetched rate details (only occasionally to avoid spam)
+    if (Math.random() < 0.1) {
+      console.log(`📊 Fetched live rate: ₹${liveRate.ratePerGram.toFixed(2)}/gram (₹${liveRate.ratePerKg}/kg)`);
+      console.log(`📊 Source: ${liveRate.source}, Raw Ask: ${liveRate.rawData?.ask || 'N/A'}, Raw High: ${liveRate.rawData?.high || 'N/A'}`);
+    }
 
     // Update MongoDB directly with fresh rate
     const mongoose = require('mongoose');
@@ -596,7 +610,10 @@ const updateRatesHandler = async (req, res = null) => {
     const baseRatePerGram = liveRate.ratePerGram;
     const baseRatePerKg = liveRate.ratePerKg; // Use exact value from source
     
-    console.log(`💾 Updating MongoDB with base rate: ₹${baseRatePerGram.toFixed(2)}/gram (₹${baseRatePerKg}/kg)`);
+    // Only log occasionally to avoid spam
+    if (Math.random() < 0.1) {
+      console.log(`💾 Updating MongoDB with base rate: ₹${baseRatePerGram.toFixed(2)}/gram (₹${baseRatePerKg}/kg)`);
+    }
     const rateDefinitions = [
       { name: 'Silver Coin 1 Gram', type: 'coin', weight: { value: 1, unit: 'grams' }, purity: '99.9%' },
       { name: 'Silver Coin 5 Grams', type: 'coin', weight: { value: 5, unit: 'grams' }, purity: '99.9%' },
@@ -658,25 +675,29 @@ const updateRatesHandler = async (req, res = null) => {
     try {
       const bulkResult = await SilverRate.bulkWrite(bulkOps, { ordered: false });
       updatedCount = bulkResult.modifiedCount + bulkResult.upsertedCount;
-      console.log(`✅ Bulk update: ${updatedCount} rates updated (${bulkResult.modifiedCount} modified, ${bulkResult.upsertedCount} upserted)`);
       
-      // Log first rate for verification
-      if (rateDefinitions.length > 0) {
-        const firstRate = rateDefinitions[0];
-        let firstRatePerGram = baseRatePerGram;
-        if (firstRate.purity === '92.5%') {
-          firstRatePerGram = baseRatePerGram * 0.96;
-        } else if (firstRate.purity === '99.99%') {
-          firstRatePerGram = baseRatePerGram * 1.005;
+      // Only log occasionally to avoid spam (every 10th update)
+      if (Math.random() < 0.1) {
+        console.log(`✅ Bulk update: ${updatedCount} rates updated (${bulkResult.modifiedCount} modified, ${bulkResult.upsertedCount} upserted)`);
+        
+        // Log first rate for verification
+        if (rateDefinitions.length > 0) {
+          const firstRate = rateDefinitions[0];
+          let firstRatePerGram = baseRatePerGram;
+          if (firstRate.purity === '92.5%') {
+            firstRatePerGram = baseRatePerGram * 0.96;
+          } else if (firstRate.purity === '99.99%') {
+            firstRatePerGram = baseRatePerGram * 1.005;
+          }
+          const manualAdj = manualAdjustments[firstRate.name]?.manualAdjustment || 0;
+          firstRatePerGram = firstRatePerGram + manualAdj;
+          let weightInGrams = firstRate.weight.value;
+          if (firstRate.weight.unit === 'kg') {
+            weightInGrams = firstRate.weight.value * 1000;
+          }
+          const totalRate = Math.round(firstRatePerGram * weightInGrams * 100) / 100;
+          console.log(`✅ Sample update: ${firstRate.name} = ₹${firstRatePerGram.toFixed(2)}/gram (₹${totalRate}/total)`);
         }
-        const manualAdj = manualAdjustments[firstRate.name]?.manualAdjustment || 0;
-        firstRatePerGram = firstRatePerGram + manualAdj;
-        let weightInGrams = firstRate.weight.value;
-        if (firstRate.weight.unit === 'kg') {
-          weightInGrams = firstRate.weight.value * 1000;
-        }
-        const totalRate = Math.round(firstRatePerGram * weightInGrams * 100) / 100;
-        console.log(`✅ Sample update: ${firstRate.name} = ₹${firstRatePerGram.toFixed(2)}/gram (₹${totalRate}/total)`);
       }
     } catch (bulkErr) {
       console.error('❌ Bulk update failed, falling back to individual updates:', bulkErr.message);
@@ -729,17 +750,21 @@ const updateRatesHandler = async (req, res = null) => {
     }
     
     const duration = Date.now() - startTime;
-    console.log(`✅ Rate update completed: Updated ${updatedCount} rates in MongoDB`);
-    console.log(`   Base Rate: ₹${baseRatePerGram.toFixed(2)}/gram (₹${baseRatePerKg}/kg)`);
-    console.log(`   Source: ${liveRate.source}`);
-    console.log(`   Duration: ${duration}ms`);
-    console.log(`   Timestamp: ${new Date().toISOString()}`);
     
-    // Verify one rate was actually updated
-    const verifyRate = await SilverRate.findOne({ location: 'Andhra Pradesh' }).sort({ lastUpdated: -1 });
-    if (verifyRate) {
-      const verifyAge = Date.now() - new Date(verifyRate.lastUpdated).getTime();
-      console.log(`✅ Verification: Latest rate "${verifyRate.name}" = ₹${verifyRate.ratePerGram}/gram (updated ${Math.round(verifyAge/1000)}s ago)`);
+    // Only log occasionally to avoid spam (every 10th update)
+    if (Math.random() < 0.1) {
+      console.log(`✅ Rate update completed: Updated ${updatedCount} rates in MongoDB`);
+      console.log(`   Base Rate: ₹${baseRatePerGram.toFixed(2)}/gram (₹${baseRatePerKg}/kg)`);
+      console.log(`   Source: ${liveRate.source}`);
+      console.log(`   Duration: ${duration}ms`);
+      console.log(`   Timestamp: ${new Date().toISOString()}`);
+      
+      // Verify one rate was actually updated
+      const verifyRate = await SilverRate.findOne({ location: 'Andhra Pradesh' }).sort({ lastUpdated: -1 });
+      if (verifyRate) {
+        const verifyAge = Date.now() - new Date(verifyRate.lastUpdated).getTime();
+        console.log(`✅ Verification: Latest rate "${verifyRate.name}" = ₹${verifyRate.ratePerGram}/gram (updated ${Math.round(verifyAge/1000)}s ago)`);
+      }
     }
     
     // Only send response if res object is provided (not for background calls)
