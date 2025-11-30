@@ -841,7 +841,7 @@ const updateRatesHandler = async (req, res = null) => {
 
           const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
 
-          await SilverRate.findOneAndUpdate(
+          const updateResult = await SilverRate.findOneAndUpdate(
             { name: rateDef.name, location: 'Andhra Pradesh' },
             {
               $set: {
@@ -858,8 +858,14 @@ const updateRatesHandler = async (req, res = null) => {
                 source: liveRate.source || 'cron-update'
               }
             },
-            { upsert: true, new: true }
+            { upsert: true, new: true, runValidators: true }
           );
+          
+          if (!updateResult) {
+            console.error(`❌ Failed to update ${rateDef.name}: findOneAndUpdate returned null`);
+          } else {
+            console.log(`✅ Updated ${rateDef.name}: ₹${ratePerGram.toFixed(2)}/gram`);
+          }
           updatedCount++;
         } catch (err) {
           console.error(`❌ Failed to update ${rateDef.name}:`, err.message);
