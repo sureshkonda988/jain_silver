@@ -299,15 +299,17 @@ router.get('/', async (req, res) => {
           const VERY_STALE_THRESHOLD = 3000; // 3 seconds - if very stale, wait for update before serving
           const OLD_RATE_THRESHOLD = 170; // If rate is below this, it's likely old cached data
           
-          // Check if rates are old cached data (99.9% should be ~₹176-177, not ₹169)
-          const isOldCachedData = latestRate.purity === '99.9%' && latestRate.ratePerGram < OLD_RATE_THRESHOLD;
+          // Check if ANY 99.9% rate is old cached data (should be ~₹176-177, not ₹169)
+          const hasOld99_9Rates = mongoRates.some(rate => 
+            rate.purity === '99.9%' && rate.ratePerGram < OLD_RATE_THRESHOLD
+          );
           
-          // If rates are very stale OR old cached data, wait for update before serving
-          if (mongoAge > VERY_STALE_THRESHOLD || isOldCachedData) {
-            const reason = isOldCachedData 
-              ? `old cached data (₹${latestRate.ratePerGram}/gram for 99.9%, expected ~₹176-177)`
+          // If rates are very stale OR contain old 99.9% rates, wait for update before serving
+          if (mongoAge > VERY_STALE_THRESHOLD || hasOld99_9Rates) {
+            const reason = hasOld99_9Rates 
+              ? `contains old 99.9% rates (₹169 detected, expected ~₹176-177)`
               : `very stale (${Math.round(mongoAge/1000)}s old)`;
-            console.log(`⚠️ Rates are ${reason}, updating before serving...`);
+            console.log(`⚠️ Rates are ${reason}, fetching fresh rates before serving...`);
             try {
               await updateRatesHandler(req, null); // Wait for update
               // Fetch fresh rates after update
@@ -315,26 +317,57 @@ router.get('/', async (req, res) => {
                 .sort({ name: 1 })
                 .lean();
               if (freshRates && freshRates.length > 0) {
-                const freshLatest = freshRates.reduce((latest, rate) => {
-                  return rate.lastUpdated > latest.lastUpdated ? rate : latest;
-                }, freshRates[0]);
-                const freshAge = Date.now() - new Date(freshLatest.lastUpdated).getTime();
-                console.log(`✅ Fresh rates loaded: ${freshRates.length} rates (${Math.round(freshAge/1000)}s old, latest: ${freshLatest.name} = ₹${freshLatest.ratePerGram}/gram)`);
+                // Verify no old 99.9% rates in fresh data
+                const stillHasOldRates = freshRates.some(rate => 
+                  rate.purity === '99.9%' && rate.ratePerGram < OLD_RATE_THRESHOLD
+                );
                 
-                const ratesWithUSD = freshRates.map(rate => ({
-                  ...rate,
-                  usdInrRate: cachedBaseRate.usdInrRate || 89.25
-                }));
-                res.set({
-                  'Cache-Control': 'no-cache, no-store, must-revalidate',
-                  'Pragma': 'no-cache',
-                  'Expires': '0'
-                });
-                return res.json(ratesWithUSD);
+                if (stillHasOldRates) {
+                  console.error('❌ Fresh rates still contain old 99.9% rates! Update may have failed.');
+                  // Try one more time with longer timeout
+                  await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+                  await updateRatesHandler(req, null);
+                  const retryRates = await SilverRate.find({ location: 'Andhra Pradesh' })
+                    .sort({ name: 1 })
+                    .lean();
+                  if (retryRates && retryRates.length > 0) {
+                    const ratesWithUSD = retryRates.map(rate => ({
+                      ...rate,
+                      usdInrRate: cachedBaseRate.usdInrRate || 89.25
+                    }));
+                    res.set({
+                      'Cache-Control': 'no-cache, no-store, must-revalidate',
+                      'Pragma': 'no-cache',
+                      'Expires': '0'
+                    });
+                    return res.json(ratesWithUSD);
+                  }
+                } else {
+                  const freshLatest = freshRates.reduce((latest, rate) => {
+                    return rate.lastUpdated > latest.lastUpdated ? rate : latest;
+                  }, freshRates[0]);
+                  const freshAge = Date.now() - new Date(freshLatest.lastUpdated).getTime();
+                  console.log(`✅ Fresh rates loaded: ${freshRates.length} rates (${Math.round(freshAge/1000)}s old, latest: ${freshLatest.name} = ₹${freshLatest.ratePerGram}/gram)`);
+                  
+                  const ratesWithUSD = freshRates.map(rate => ({
+                    ...rate,
+                    usdInrRate: cachedBaseRate.usdInrRate || 89.25
+                  }));
+                  res.set({
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0'
+                  });
+                  return res.json(ratesWithUSD);
+                }
               }
             } catch (updateErr) {
               console.error('❌ Update failed for stale/old rates:', updateErr.message);
-              // Fall through to serve stale rates (better than nothing)
+              // Don't serve old rates - return error instead
+              return res.status(503).json({ 
+                error: 'Rate update in progress, please retry',
+                message: 'Fetching fresh rates, please try again in a moment'
+              });
             }
           }
           
@@ -357,13 +390,37 @@ router.get('/', async (req, res) => {
             console.warn(`⚠️ Serving rates that are ${Math.round(mongoAge/1000)}s old - updates may be failing!`);
           }
           
-          // Warn if serving rates that seem too low (might be old cached rates)
-          if (latestRate.ratePerGram < OLD_RATE_THRESHOLD && latestRate.purity === '99.9%') {
-            console.warn(`⚠️ WARNING: Serving 99.9% rate (₹${latestRate.ratePerGram}/gram) seems too low! Expected ~₹176-177/gram. This is old cached data - triggering update...`);
-            // Trigger immediate update
-            updateRatesHandler(req, null).catch(err => {
-              console.error('❌ Immediate update failed:', err.message);
-            });
+          // Check if we're about to serve old 99.9% rates - if so, don't serve them
+          const hasOld99_9InResponse = mongoRates.some(rate => 
+            rate.purity === '99.9%' && rate.ratePerGram < OLD_RATE_THRESHOLD
+          );
+          
+          if (hasOld99_9InResponse) {
+            console.error(`❌ BLOCKED: Attempted to serve old 99.9% rates (₹169 detected). Fetching fresh rates...`);
+            try {
+              await updateRatesHandler(req, null);
+              const freshRates = await SilverRate.find({ location: 'Andhra Pradesh' })
+                .sort({ name: 1 })
+                .lean();
+              if (freshRates && freshRates.length > 0) {
+                const ratesWithUSD = freshRates.map(rate => ({
+                  ...rate,
+                  usdInrRate: cachedBaseRate.usdInrRate || 89.25
+                }));
+                res.set({
+                  'Cache-Control': 'no-cache, no-store, must-revalidate',
+                  'Pragma': 'no-cache',
+                  'Expires': '0'
+                });
+                return res.json(ratesWithUSD);
+              }
+            } catch (updateErr) {
+              console.error('❌ Failed to fetch fresh rates:', updateErr.message);
+              return res.status(503).json({ 
+                error: 'Rate update in progress',
+                message: 'Please retry in a moment'
+              });
+            }
           }
           
           // Only log occasionally to avoid spam (every 10th request)
