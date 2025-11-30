@@ -86,11 +86,14 @@ const updateRates = async (io) => {
     consecutiveFailures = 0;
     lastSuccessfulUpdate = Date.now();
     
+    // Use EXACT rate from source - no smoothing, no rounding of ratePerKg
     const baseRatePerGram = liveRate.ratePerGram;
+    const baseRatePerKg = liveRate.ratePerKg; // Use exact value from source
     
     // Log every successful fetch (with timestamp for accuracy)
     const fetchTime = Date.now() - startTime;
-    console.log(`✅ [${new Date().toISOString()}] Fetched live rate: ₹${baseRatePerGram.toFixed(2)}/gram (₹${liveRate.ratePerKg}/kg, source: ${liveRate.source}, fetch time: ${fetchTime}ms)`);
+    console.log(`✅ [${new Date().toISOString()}] Fetched EXACT live rate: ₹${baseRatePerGram.toFixed(2)}/gram (₹${baseRatePerKg}/kg, source: ${liveRate.source}, fetch time: ${fetchTime}ms)`);
+    console.log(`📊 Raw source data: Ask=${liveRate.rawData?.ask || 'N/A'}, High=${liveRate.rawData?.high || 'N/A'}, RatePerKg=${baseRatePerKg}`);
     
     // Update all rates based on the live rate from endpoint
     const updatePromises = rates.map(async (rate) => {

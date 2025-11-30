@@ -141,13 +141,15 @@ const fetchFromRBGoldspot = async () => {
     console.log(`📊 Total rates found: ${Object.keys(allRates).length}`);
 
     if (ratePerGram && ratePerGram > 0 && !isNaN(ratePerGram)) {
-      // Round consistently: 2 decimal places for gram, whole number for kg
+      // Use exact ratePerKg from source (no rounding to preserve accuracy)
+      // Only round ratePerGram for display (2 decimal places)
       const roundedRatePerGram = Math.round(ratePerGram * 100) / 100;
-      const roundedRatePerKg = Math.round(roundedRatePerGram * 1000);
+      // Use original ratePerKg directly - don't round it to preserve exact source value
+      const exactRatePerKg = ratePerKg; // Keep original value from source
       
       const result = {
-        ratePerKg: roundedRatePerKg,
-        ratePerGram: roundedRatePerGram,
+        ratePerKg: exactRatePerKg, // Use exact value from source
+        ratePerGram: roundedRatePerGram, // Rounded for display
         source: 'bcast.rbgoldspot.com',
         timestamp: new Date(),
         rawData: silver999Data,
@@ -156,7 +158,8 @@ const fetchFromRBGoldspot = async () => {
         silverMini999Rate: silverMini999Rate || null,
         allRates: allRates // Include all rates for reference
       };
-      console.log(`✅ Successfully extracted rate from RB Goldspot: ₹${result.ratePerGram.toFixed(2)}/gram (₹${result.ratePerKg}/kg) [Ask: ${silver999Data?.ask || 'N/A'}, High: ${silver999Data?.high || 'N/A'}]`);
+      console.log(`✅ Successfully extracted rate from RB Goldspot: ₹${result.ratePerGram.toFixed(2)}/gram (₹${result.ratePerKg}/kg) [Raw Ask: ${silver999Data?.ask || 'N/A'}, Raw High: ${silver999Data?.high || 'N/A'}, Raw Bid: ${silver999Data?.bid || 'N/A'}]`);
+      console.log(`📊 Rate breakdown: Source=${silver999Data?.ask || silver999Data?.high || 'N/A'}, PerKg=${exactRatePerKg}, PerGram=${roundedRatePerGram}`);
       return result;
     }
     
@@ -376,9 +379,14 @@ const fetchFromVercel = async () => {
     }
 
     if (ratePerGram && ratePerGram > 0 && !isNaN(ratePerGram)) {
+      // Use exact ratePerKg from source (no rounding to preserve accuracy)
+      // Only round ratePerGram for display (2 decimal places)
+      const roundedRatePerGram = Math.round(ratePerGram * 100) / 100;
+      const exactRatePerKg = ratePerKg; // Keep original value from source
+      
       const result = {
-        ratePerKg: Math.round(ratePerKg),
-        ratePerGram: Math.round(ratePerGram * 100) / 100,
+        ratePerKg: exactRatePerKg, // Use exact value from source
+        ratePerGram: roundedRatePerGram, // Rounded for display
         source: 'jainsilverpp1.vercel.app',
         timestamp: new Date(),
         rawData: rateData,
@@ -387,7 +395,8 @@ const fetchFromVercel = async () => {
         silverMini999Rate: silverMini999Rate || null,
         allRates: allRates // Include all rates for reference
       };
-      console.log(`✅ Successfully extracted rate: ₹${result.ratePerGram.toFixed(2)}/gram (₹${result.ratePerKg}/kg)`);
+      console.log(`✅ Successfully extracted rate from Vercel: ₹${result.ratePerGram.toFixed(2)}/gram (₹${result.ratePerKg}/kg)`);
+      console.log(`📊 Rate breakdown: PerKg=${exactRatePerKg}, PerGram=${roundedRatePerGram}`);
       return result;
     }
     
