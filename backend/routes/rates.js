@@ -295,14 +295,42 @@ router.get('/', async (req, res) => {
           }, mongoRates[0]);
           
           const mongoAge = Date.now() - new Date(latestRate.lastUpdated).getTime();
-          const STALE_THRESHOLD = 60000; // 1 minute - if older, trigger update
+          const STALE_THRESHOLD = 10000; // 10 seconds - if older, trigger update (for live updates)
+          const VERY_STALE_THRESHOLD = 3600000; // 1 hour - if very stale, wait for update before serving
           
-          // If rates are stale (older than 1 minute), trigger update in background
+          // If rates are very stale (older than 1 hour), wait for update before serving
+          if (mongoAge > VERY_STALE_THRESHOLD) {
+            console.log(`⚠️ Rates are VERY stale (${Math.round(mongoAge/3600000)}h old), updating before serving...`);
+            try {
+              await updateRatesHandler(req, null); // Wait for update
+              // Fetch fresh rates after update
+              const freshRates = await SilverRate.find({ location: 'Andhra Pradesh' })
+                .sort({ name: 1 })
+                .lean();
+              if (freshRates && freshRates.length > 0) {
+                const ratesWithUSD = freshRates.map(rate => ({
+                  ...rate,
+                  usdInrRate: cachedBaseRate.usdInrRate || 89.25
+                }));
+                res.set({
+                  'Cache-Control': 'no-cache, no-store, must-revalidate',
+                  'Pragma': 'no-cache',
+                  'Expires': '0'
+                });
+                return res.json(ratesWithUSD);
+              }
+            } catch (updateErr) {
+              console.error('❌ Update failed for very stale rates:', updateErr.message);
+              // Fall through to serve stale rates
+            }
+          }
+          
+          // If rates are stale (older than 10 seconds), trigger update in background
           if (mongoAge > STALE_THRESHOLD) {
-            console.log(`⚠️ Rates are stale (${Math.round(mongoAge/1000)}s old), triggering update...`);
-            // Trigger update in background (non-blocking)
-            updateRatesHandler(req, res).catch(err => {
-              console.error('Background update failed:', err.message);
+            console.log(`⚠️ Rates are stale (${Math.round(mongoAge/1000)}s old), triggering live update...`);
+            // Trigger update in background (non-blocking) - this will fetch from RB Goldspot and update MongoDB
+            updateRatesHandler(req, null).catch(err => {
+              console.error('❌ Background update failed:', err.message);
             });
           }
           
@@ -595,6 +623,7 @@ const updateRatesHandler = async (req, res = null) => {
 
         const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
 
+        // Update with exact rate from source
         const updated = await SilverRate.findOneAndUpdate(
           { name: rateDef.name, location: 'Andhra Pradesh' },
           {
