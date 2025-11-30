@@ -792,7 +792,10 @@ const updateRatesHandler = async (req, res = null) => {
     }
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error(`❌ Rate update failed (${duration}ms):`, error.message);
+    console.error(`❌ Rate update FAILED (${duration}ms):`, error.message);
+    if (error.stack) {
+      console.error(`❌ Error stack:`, error.stack.substring(0, 500));
+    }
     if (res) {
       res.status(500).json({ 
         success: false,
