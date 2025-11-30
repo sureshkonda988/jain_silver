@@ -251,13 +251,6 @@ router.get('/', async (req, res) => {
       // Continue without auth
     }
     
-    // Trigger background update (non-blocking) - but skip on serverless to avoid timeouts
-    // On serverless, rate updates should be handled by a separate cron job or external service
-    if (!process.env.VERCEL) {
-      // Only run background fetch on non-serverless platforms
-      updateRatesFromEndpoints().catch(() => {});
-    }
-    
     // ALWAYS try to get rates from MongoDB first (primary source)
     // In serverless, we need to ensure connection on each request
     try {
@@ -302,6 +295,16 @@ router.get('/', async (req, res) => {
           }, mongoRates[0]);
           
           const mongoAge = Date.now() - new Date(latestRate.lastUpdated).getTime();
+          const STALE_THRESHOLD = 60000; // 1 minute - if older, trigger update
+          
+          // If rates are stale (older than 1 minute), trigger update in background
+          if (mongoAge > STALE_THRESHOLD) {
+            console.log(`⚠️ Rates are stale (${Math.round(mongoAge/1000)}s old), triggering update...`);
+            // Trigger update in background (non-blocking)
+            updateRatesHandler(req, res).catch(err => {
+              console.error('Background update failed:', err.message);
+            });
+          }
           
           // Log the age for debugging, but always serve from MongoDB
           console.log(`📦 Serving ${mongoRates.length} rates from MongoDB (${Math.round(mongoAge/1000)}s old, latest: ${latestRate.name} = ₹${latestRate.ratePerGram}/gram)`);
@@ -321,7 +324,30 @@ router.get('/', async (req, res) => {
           
           return res.json(ratesWithUSD);
         } else {
-          console.warn('⚠️ No rates found in MongoDB, falling back to cache');
+          console.warn('⚠️ No rates found in MongoDB, triggering update...');
+          // If no rates exist, try to update immediately
+          try {
+            await updateRatesHandler(req, res);
+            // After update, fetch again
+            const updatedRates = await SilverRate.find({ location: 'Andhra Pradesh' })
+              .sort({ name: 1 })
+              .lean();
+            if (updatedRates && updatedRates.length > 0) {
+              const ratesWithUSD = updatedRates.map(rate => ({
+                ...rate,
+                usdInrRate: cachedBaseRate.usdInrRate || 89.25
+              }));
+              res.set({
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+              });
+              return res.json(ratesWithUSD);
+            }
+          } catch (updateErr) {
+            console.error('Update failed:', updateErr.message);
+          }
+          console.warn('⚠️ Falling back to cache');
         }
       } else {
         console.warn('⚠️ MongoDB not connected, falling back to cache');
@@ -470,7 +496,8 @@ router.post('/force-update', auth, async (req, res) => {
 // Dedicated endpoint for cron jobs to update rates (no auth required for cron)
 // This endpoint is designed to be called by Vercel Cron or external services
 // Also supports GET method for easy manual triggering
-const updateRatesHandler = async (req, res) => {
+// Can be called internally without response (for background updates)
+const updateRatesHandler = async (req, res = null) => {
   const startTime = Date.now();
   try {
     console.log('🔄 Cron job triggered: Updating rates...');
@@ -488,11 +515,14 @@ const updateRatesHandler = async (req, res) => {
 
     if (!liveRate || !liveRate.ratePerGram || liveRate.ratePerGram <= 0) {
       console.error('❌ Invalid rate received:', liveRate);
-      return res.status(500).json({ 
-        success: false,
-        message: 'Failed to fetch valid rate from endpoints',
-        timestamp: new Date().toISOString()
-      });
+      if (res) {
+        return res.status(500).json({ 
+          success: false,
+          message: 'Failed to fetch valid rate from endpoints',
+          timestamp: new Date().toISOString()
+        });
+      }
+      return; // If no response object, just return silently
     }
 
     // Log the fetched rate details
@@ -515,11 +545,14 @@ const updateRatesHandler = async (req, res) => {
         console.log('✅ MongoDB connected for rate update');
       } else {
         console.error('❌ MONGODB_URI not set');
-        return res.status(500).json({ 
-          success: false,
-          message: 'MongoDB URI not configured',
-          timestamp: new Date().toISOString()
-        });
+        if (res) {
+          return res.status(500).json({ 
+            success: false,
+            message: 'MongoDB URI not configured',
+            timestamp: new Date().toISOString()
+          });
+        }
+        return; // If no response object, just return silently
       }
     }
 
@@ -594,7 +627,7 @@ const updateRatesHandler = async (req, res) => {
     await Promise.all(updatePromises);
     
     const duration = Date.now() - startTime;
-    console.log(`✅ Cron job completed: Updated ${updatedCount} rates in MongoDB`);
+    console.log(`✅ Rate update completed: Updated ${updatedCount} rates in MongoDB`);
     console.log(`   Base Rate: ₹${baseRatePerGram.toFixed(2)}/gram (₹${baseRatePerKg}/kg)`);
     console.log(`   Source: ${liveRate.source}`);
     console.log(`   Duration: ${duration}ms`);
@@ -607,32 +640,38 @@ const updateRatesHandler = async (req, res) => {
       console.log(`✅ Verification: Latest rate "${verifyRate.name}" = ₹${verifyRate.ratePerGram}/gram (updated ${Math.round(verifyAge/1000)}s ago)`);
     }
     
-    res.json({ 
-      success: true,
-      message: `Successfully updated ${updatedCount} rates`,
-      baseRate: baseRatePerGram,
-      baseRatePerKg: baseRatePerKg,
-      ratePerKg: liveRate.ratePerKg,
-      source: liveRate.source,
-      updatedCount: updatedCount,
-      duration: `${duration}ms`,
-      timestamp: new Date().toISOString(),
-      rawData: {
-        ask: liveRate.rawData?.ask || null,
-        high: liveRate.rawData?.high || null,
-        bid: liveRate.rawData?.bid || null
-      }
-    });
+    // Only send response if res object is provided (not for background calls)
+    if (res) {
+      res.json({ 
+        success: true,
+        message: `Successfully updated ${updatedCount} rates`,
+        baseRate: baseRatePerGram,
+        baseRatePerKg: baseRatePerKg,
+        ratePerKg: liveRate.ratePerKg,
+        source: liveRate.source,
+        updatedCount: updatedCount,
+        duration: `${duration}ms`,
+        timestamp: new Date().toISOString(),
+        rawData: {
+          ask: liveRate.rawData?.ask || null,
+          high: liveRate.rawData?.high || null,
+          bid: liveRate.rawData?.bid || null
+        }
+      });
+    }
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error(`❌ Cron job failed (${duration}ms):`, error.message);
-    res.status(500).json({ 
-      success: false,
-      message: 'Rate update failed',
-      error: error.message,
-      duration: `${duration}ms`,
-      timestamp: new Date().toISOString()
-    });
+    console.error(`❌ Rate update failed (${duration}ms):`, error.message);
+    if (res) {
+      res.status(500).json({ 
+        success: false,
+        message: 'Rate update failed',
+        error: error.message,
+        duration: `${duration}ms`,
+        timestamp: new Date().toISOString()
+      });
+    }
+    // If no response object, error is already logged, just return
   }
 };
 
