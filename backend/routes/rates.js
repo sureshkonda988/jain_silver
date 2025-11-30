@@ -344,6 +344,11 @@ router.get('/', async (req, res) => {
             console.warn(`⚠️ Serving rates that are ${Math.round(mongoAge/1000)}s old - updates may be failing!`);
           }
           
+          // Warn if serving rates that seem too low (might be old cached rates)
+          if (latestRate.ratePerGram < 170) {
+            console.warn(`⚠️ WARNING: Serving rate (₹${latestRate.ratePerGram}/gram) seems too low! Expected ~₹176-177/gram. This might be old cached data.`);
+          }
+          
           // Only log occasionally to avoid spam (every 10th request)
           if (Math.random() < 0.1) {
             console.log(`📦 Serving ${mongoRates.length} rates from MongoDB (${Math.round(mongoAge/1000)}s old, latest: ${latestRate.name} = ₹${latestRate.ratePerGram}/gram)`);
@@ -681,7 +686,12 @@ const updateRatesHandler = async (req, res = null) => {
       updatedCount = bulkResult.modifiedCount + bulkResult.upsertedCount;
       
       // ALWAYS log bulk update result (critical for debugging)
-      console.log(`✅ MongoDB bulk update: ${updatedCount} rates updated (${bulkResult.modifiedCount} modified, ${bulkResult.upsertedCount} upserted)`);
+      console.log(`✅ MongoDB bulk update: ${updatedCount} rates updated (${bulkResult.modifiedCount} modified, ${bulkResult.upsertedCount} upserted) from base ₹${baseRatePerGram.toFixed(2)}/gram`);
+      
+      // Warn if not all rates were updated
+      if (updatedCount < rateDefinitions.length) {
+        console.warn(`⚠️ WARNING: Only ${updatedCount}/${rateDefinitions.length} rates were updated! Some rates may be stale.`);
+      }
       
       // Log first rate for verification
       if (rateDefinitions.length > 0) {
