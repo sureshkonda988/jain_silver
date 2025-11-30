@@ -486,12 +486,17 @@ router.post('/update', async (req, res) => {
     ]);
 
     if (!liveRate || !liveRate.ratePerGram || liveRate.ratePerGram <= 0) {
+      console.error('❌ Invalid rate received:', liveRate);
       return res.status(500).json({ 
         success: false,
         message: 'Failed to fetch valid rate from endpoints',
         timestamp: new Date().toISOString()
       });
     }
+
+    // Log the fetched rate details
+    console.log(`📊 Fetched live rate: ₹${liveRate.ratePerGram.toFixed(2)}/gram (₹${liveRate.ratePerKg}/kg)`);
+    console.log(`📊 Source: ${liveRate.source}, Raw Ask: ${liveRate.rawData?.ask || 'N/A'}, Raw High: ${liveRate.rawData?.high || 'N/A'}`);
 
     // Update MongoDB directly with fresh rate
     const mongoose = require('mongoose');
@@ -506,10 +511,22 @@ router.post('/update', async (req, res) => {
           serverSelectionTimeoutMS: 5000,
           maxPoolSize: 1
         });
+        console.log('✅ MongoDB connected for rate update');
+      } else {
+        console.error('❌ MONGODB_URI not set');
+        return res.status(500).json({ 
+          success: false,
+          message: 'MongoDB URI not configured',
+          timestamp: new Date().toISOString()
+        });
       }
     }
 
+    // Use EXACT rate from source (no smoothing, no rounding of base rate)
     const baseRatePerGram = liveRate.ratePerGram;
+    const baseRatePerKg = liveRate.ratePerKg; // Use exact value from source
+    
+    console.log(`💾 Updating MongoDB with base rate: ₹${baseRatePerGram.toFixed(2)}/gram (₹${baseRatePerKg}/kg)`);
     const rateDefinitions = [
       { name: 'Silver Coin 1 Gram', type: 'coin', weight: { value: 1, unit: 'grams' }, purity: '99.9%' },
       { name: 'Silver Coin 5 Grams', type: 'coin', weight: { value: 5, unit: 'grams' }, purity: '99.9%' },
@@ -544,7 +561,7 @@ router.post('/update', async (req, res) => {
 
         const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
 
-        await SilverRate.findOneAndUpdate(
+        const updated = await SilverRate.findOneAndUpdate(
           { name: rateDef.name, location: 'Andhra Pradesh' },
           {
             name: rateDef.name,
@@ -561,6 +578,12 @@ router.post('/update', async (req, res) => {
           },
           { upsert: true, new: true }
         );
+        
+        // Log first update for verification
+        if (updatedCount === 0) {
+          console.log(`✅ Sample update: ${rateDef.name} = ₹${ratePerGram.toFixed(2)}/gram (₹${totalRate}/total)`);
+        }
+        
         updatedCount++;
       } catch (err) {
         console.error(`❌ Failed to update ${rateDef.name}:`, err.message);
@@ -570,17 +593,34 @@ router.post('/update', async (req, res) => {
     await Promise.all(updatePromises);
     
     const duration = Date.now() - startTime;
-    console.log(`✅ Cron job completed: Updated ${updatedCount} rates in MongoDB (Base: ₹${baseRatePerGram.toFixed(2)}/gram, source: ${liveRate.source}, duration: ${duration}ms)`);
+    console.log(`✅ Cron job completed: Updated ${updatedCount} rates in MongoDB`);
+    console.log(`   Base Rate: ₹${baseRatePerGram.toFixed(2)}/gram (₹${baseRatePerKg}/kg)`);
+    console.log(`   Source: ${liveRate.source}`);
+    console.log(`   Duration: ${duration}ms`);
+    console.log(`   Timestamp: ${new Date().toISOString()}`);
+    
+    // Verify one rate was actually updated
+    const verifyRate = await SilverRate.findOne({ location: 'Andhra Pradesh' }).sort({ lastUpdated: -1 });
+    if (verifyRate) {
+      const verifyAge = Date.now() - new Date(verifyRate.lastUpdated).getTime();
+      console.log(`✅ Verification: Latest rate "${verifyRate.name}" = ₹${verifyRate.ratePerGram}/gram (updated ${Math.round(verifyAge/1000)}s ago)`);
+    }
     
     res.json({ 
       success: true,
       message: `Successfully updated ${updatedCount} rates`,
       baseRate: baseRatePerGram,
+      baseRatePerKg: baseRatePerKg,
       ratePerKg: liveRate.ratePerKg,
       source: liveRate.source,
       updatedCount: updatedCount,
       duration: `${duration}ms`,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      rawData: {
+        ask: liveRate.rawData?.ask || null,
+        high: liveRate.rawData?.high || null,
+        bid: liveRate.rawData?.bid || null
+      }
     });
   } catch (error) {
     const duration = Date.now() - startTime;
