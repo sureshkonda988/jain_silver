@@ -533,11 +533,11 @@ const updateRatesHandler = async (req, res = null) => {
     // Import rate fetcher
     const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
     
-    // Fetch fresh rates with timeout
+    // Fetch fresh rates with timeout (Vercel allows up to 120s, but use 30s for safety)
     const liveRate = await Promise.race([
       fetchSilverRatesFromMultipleSources(),
       new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout after 8 seconds')), 8000)
+        setTimeout(() => reject(new Error('Timeout after 30 seconds')), 30000)
       )
     ]);
 
@@ -560,16 +560,24 @@ const updateRatesHandler = async (req, res = null) => {
     // Update MongoDB directly with fresh rate
     const mongoose = require('mongoose');
     
-    // Ensure MongoDB connection
+    // Ensure MongoDB connection (optimized for speed)
     if (mongoose.connection.readyState !== 1) {
       const mongoURI = process.env.MONGODB_URI;
       if (mongoURI) {
-        await mongoose.connect(mongoURI, {
-          useNewUrlParser: true,
-          useUnifiedTopology: true,
-          serverSelectionTimeoutMS: 5000,
-          maxPoolSize: 1
-        });
+        // Use shorter timeout for faster connection
+        await Promise.race([
+          mongoose.connect(mongoURI, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+            serverSelectionTimeoutMS: 3000, // Reduced from 5000
+            socketTimeoutMS: 10000,
+            maxPoolSize: 1,
+            minPoolSize: 0
+          }),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('MongoDB connection timeout')), 5000)
+          )
+        ]);
         console.log('✅ MongoDB connected for rate update');
       } else {
         console.error('❌ MONGODB_URI not set');
@@ -603,57 +611,122 @@ const updateRatesHandler = async (req, res = null) => {
     ];
 
     let updatedCount = 0;
-    const updatePromises = rateDefinitions.map(async (rateDef) => {
-      try {
-        let ratePerGram = baseRatePerGram;
-        if (rateDef.purity === '92.5%') {
-          ratePerGram = baseRatePerGram * 0.96;
-        } else if (rateDef.purity === '99.99%') {
-          ratePerGram = baseRatePerGram * 1.005;
-        }
-
-        const manualAdjustment = manualAdjustments[rateDef.name]?.manualAdjustment || 0;
-        ratePerGram = ratePerGram + manualAdjustment;
-        ratePerGram = Math.max(0, Math.round(ratePerGram * 100) / 100);
-
-        let weightInGrams = rateDef.weight.value;
-        if (rateDef.weight.unit === 'kg') {
-          weightInGrams = rateDef.weight.value * 1000;
-        }
-
-        const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
-
-        // Update with exact rate from source
-        const updated = await SilverRate.findOneAndUpdate(
-          { name: rateDef.name, location: 'Andhra Pradesh' },
-          {
-            name: rateDef.name,
-            type: rateDef.type,
-            weight: rateDef.weight,
-            purity: rateDef.purity,
-            ratePerGram: ratePerGram,
-            rate: totalRate,
-            lastUpdated: new Date(),
-            location: 'Andhra Pradesh',
-            unit: 'INR',
-            manualAdjustment: manualAdjustment,
-            source: liveRate.source || 'cron-update'
-          },
-          { upsert: true, new: true }
-        );
-        
-        // Log first update for verification
-        if (updatedCount === 0) {
-          console.log(`✅ Sample update: ${rateDef.name} = ₹${ratePerGram.toFixed(2)}/gram (₹${totalRate}/total)`);
-        }
-        
-        updatedCount++;
-      } catch (err) {
-        console.error(`❌ Failed to update ${rateDef.name}:`, err.message);
+    // Use bulk write for faster MongoDB updates (more efficient than individual updates)
+    const bulkOps = rateDefinitions.map((rateDef) => {
+      let ratePerGram = baseRatePerGram;
+      if (rateDef.purity === '92.5%') {
+        ratePerGram = baseRatePerGram * 0.96;
+      } else if (rateDef.purity === '99.99%') {
+        ratePerGram = baseRatePerGram * 1.005;
       }
+
+      const manualAdjustment = manualAdjustments[rateDef.name]?.manualAdjustment || 0;
+      ratePerGram = ratePerGram + manualAdjustment;
+      ratePerGram = Math.max(0, Math.round(ratePerGram * 100) / 100);
+
+      let weightInGrams = rateDef.weight.value;
+      if (rateDef.weight.unit === 'kg') {
+        weightInGrams = rateDef.weight.value * 1000;
+      }
+
+      const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
+
+      return {
+        updateOne: {
+          filter: { name: rateDef.name, location: 'Andhra Pradesh' },
+          update: {
+            $set: {
+              name: rateDef.name,
+              type: rateDef.type,
+              weight: rateDef.weight,
+              purity: rateDef.purity,
+              ratePerGram: ratePerGram,
+              rate: totalRate,
+              lastUpdated: new Date(),
+              location: 'Andhra Pradesh',
+              unit: 'INR',
+              manualAdjustment: manualAdjustment,
+              source: liveRate.source || 'cron-update'
+            }
+          },
+          upsert: true
+        }
+      };
     });
     
-    await Promise.all(updatePromises);
+    // Execute bulk write (much faster than individual updates)
+    try {
+      const bulkResult = await SilverRate.bulkWrite(bulkOps, { ordered: false });
+      updatedCount = bulkResult.modifiedCount + bulkResult.upsertedCount;
+      console.log(`✅ Bulk update: ${updatedCount} rates updated (${bulkResult.modifiedCount} modified, ${bulkResult.upsertedCount} upserted)`);
+      
+      // Log first rate for verification
+      if (rateDefinitions.length > 0) {
+        const firstRate = rateDefinitions[0];
+        let firstRatePerGram = baseRatePerGram;
+        if (firstRate.purity === '92.5%') {
+          firstRatePerGram = baseRatePerGram * 0.96;
+        } else if (firstRate.purity === '99.99%') {
+          firstRatePerGram = baseRatePerGram * 1.005;
+        }
+        const manualAdj = manualAdjustments[firstRate.name]?.manualAdjustment || 0;
+        firstRatePerGram = firstRatePerGram + manualAdj;
+        let weightInGrams = firstRate.weight.value;
+        if (firstRate.weight.unit === 'kg') {
+          weightInGrams = firstRate.weight.value * 1000;
+        }
+        const totalRate = Math.round(firstRatePerGram * weightInGrams * 100) / 100;
+        console.log(`✅ Sample update: ${firstRate.name} = ₹${firstRatePerGram.toFixed(2)}/gram (₹${totalRate}/total)`);
+      }
+    } catch (bulkErr) {
+      console.error('❌ Bulk update failed, falling back to individual updates:', bulkErr.message);
+      // Fallback to individual updates if bulk write fails
+      const updatePromises = rateDefinitions.map(async (rateDef) => {
+        try {
+          let ratePerGram = baseRatePerGram;
+          if (rateDef.purity === '92.5%') {
+            ratePerGram = baseRatePerGram * 0.96;
+          } else if (rateDef.purity === '99.99%') {
+            ratePerGram = baseRatePerGram * 1.005;
+          }
+
+          const manualAdjustment = manualAdjustments[rateDef.name]?.manualAdjustment || 0;
+          ratePerGram = ratePerGram + manualAdjustment;
+          ratePerGram = Math.max(0, Math.round(ratePerGram * 100) / 100);
+
+          let weightInGrams = rateDef.weight.value;
+          if (rateDef.weight.unit === 'kg') {
+            weightInGrams = rateDef.weight.value * 1000;
+          }
+
+          const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
+
+          await SilverRate.findOneAndUpdate(
+            { name: rateDef.name, location: 'Andhra Pradesh' },
+            {
+              $set: {
+                name: rateDef.name,
+                type: rateDef.type,
+                weight: rateDef.weight,
+                purity: rateDef.purity,
+                ratePerGram: ratePerGram,
+                rate: totalRate,
+                lastUpdated: new Date(),
+                location: 'Andhra Pradesh',
+                unit: 'INR',
+                manualAdjustment: manualAdjustment,
+                source: liveRate.source || 'cron-update'
+              }
+            },
+            { upsert: true, new: true }
+          );
+          updatedCount++;
+        } catch (err) {
+          console.error(`❌ Failed to update ${rateDef.name}:`, err.message);
+        }
+      });
+      await Promise.all(updatePromises);
+    }
     
     const duration = Date.now() - startTime;
     console.log(`✅ Rate update completed: Updated ${updatedCount} rates in MongoDB`);
