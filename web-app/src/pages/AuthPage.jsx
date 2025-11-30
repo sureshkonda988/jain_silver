@@ -92,41 +92,129 @@ function AuthPage() {
       sx={{
         minHeight: '100vh',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
         backgroundColor: colors.background,
-        p: 2,
       }}
     >
-      <Card
+      {/* Left Side - Logo Section */}
+      <Box
         sx={{
-          maxWidth: 400,
-          width: '100%',
-          borderRadius: 3,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+          display: { xs: 'none', md: 'flex' },
+          width: { md: '50%', lg: '55%' },
+          backgroundColor: colors.primary,
+          alignItems: 'center',
+          justifyContent: 'center',
+          p: 4,
+          position: 'relative',
+          overflow: 'hidden',
         }}
       >
-        <CardContent sx={{ p: 4 }}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 4 }}>
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primaryDark} 100%)`,
+            opacity: 0.95,
+          }}
+        />
+        <Box
+          sx={{
+            position: 'relative',
+            zIndex: 1,
+            textAlign: 'center',
+            maxWidth: 600,
+          }}
+        >
+          <Box
+            component="img"
+            src="/Gemini_Generated_Image_8ia19c8ia19c8ia1.png"
+            alt="Jain Silver Plaza"
+            sx={{
+              width: '100%',
+              maxWidth: 500,
+              height: 'auto',
+              mb: 4,
+              objectFit: 'contain',
+              filter: 'drop-shadow(0 10px 30px rgba(0,0,0,0.2))',
+            }}
+          />
+          <Typography
+            variant="h3"
+            sx={{
+              fontWeight: 700,
+              color: 'white',
+              mb: 2,
+              textShadow: '0 2px 10px rgba(0,0,0,0.2)',
+            }}
+          >
+            Welcome Back
+          </Typography>
+          <Typography
+            variant="h6"
+            sx={{
+              color: 'rgba(255,255,255,0.9)',
+              fontWeight: 400,
+              lineHeight: 1.6,
+            }}
+          >
+            Your trusted partner for premium silver products
+          </Typography>
+        </Box>
+      </Box>
+
+      {/* Right Side - Login Form */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: { xs: '100%', md: '50%', lg: '45%' },
+          p: { xs: 3, sm: 4, md: 6 },
+        }}
+      >
+        <Card
+          sx={{
+            width: '100%',
+            maxWidth: 450,
+            borderRadius: 3,
+            boxShadow: { xs: 'none', sm: '0 4px 20px rgba(0,0,0,0.1)' },
+            border: { xs: 'none', sm: '1px solid rgba(0,0,0,0.1)' },
+          }}
+        >
+          <CardContent sx={{ p: { xs: 3, sm: 4, md: 5 } }}>
+            {/* Mobile Logo - Only visible on small screens */}
             <Box
-              component="img"
-              src="/Gemini_Generated_Image_8ia19c8ia19c8ia1.png"
-              alt="Jain Silver Plaza"
               sx={{
-                width: { xs: 280, sm: 350 },
-                height: 'auto',
-                maxWidth: '100%',
-                mb: 3,
-                objectFit: 'contain',
+                display: { xs: 'flex', md: 'none' },
+                flexDirection: 'column',
+                alignItems: 'center',
+                mb: 4,
               }}
-            />
-            <Typography variant="h6" sx={{ fontWeight: 600, color: colors.textSecondary, mb: 0.5 }}>
-              Sign In
-            </Typography>
-            <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-              Sign in to continue
-            </Typography>
-          </Box>
+            >
+              <Box
+                component="img"
+                src="/Gemini_Generated_Image_8ia19c8ia19c8ia1.png"
+                alt="Jain Silver Plaza"
+                sx={{
+                  width: 200,
+                  height: 'auto',
+                  maxWidth: '100%',
+                  mb: 2,
+                  objectFit: 'contain',
+                }}
+              />
+            </Box>
+
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="h4" sx={{ fontWeight: 700, color: colors.textPrimary, mb: 1 }}>
+                Sign In
+              </Typography>
+              <Typography variant="body1" sx={{ color: colors.textSecondary }}>
+                Sign in to your account to continue
+              </Typography>
+            </Box>
 
           {error && (
             <Alert 
@@ -215,31 +303,53 @@ function AuthPage() {
             {loading ? 'Signing In...' : 'Sign In'}
           </Button>
 
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <Button
-              variant="text"
-              onClick={() => navigate('/forgot-password')}
-              sx={{ color: colors.primary }}
-            >
-              Forgot Password?
-            </Button>
-            <Button
-              variant="text"
-              onClick={() => navigate('/register')}
-              sx={{ color: colors.primary }}
-            >
-              New User? Register Here
-            </Button>
-            <Button
-              variant="text"
-              onClick={() => navigate('/admin/login')}
-              sx={{ color: colors.primary }}
-            >
-              Admin Login
-            </Button>
-          </Box>
-        </CardContent>
-      </Card>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 3 }}>
+              <Button
+                variant="text"
+                onClick={() => navigate('/forgot-password')}
+                sx={{
+                  color: colors.primary,
+                  textTransform: 'none',
+                  fontSize: '0.95rem',
+                }}
+              >
+                Forgot Password?
+              </Button>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'center', mt: 1 }}>
+                <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                  Don't have an account?
+                </Typography>
+                <Button
+                  variant="text"
+                  onClick={() => navigate('/register')}
+                  sx={{
+                    color: colors.primary,
+                    textTransform: 'none',
+                    fontSize: '0.95rem',
+                    fontWeight: 600,
+                    p: 0,
+                    minWidth: 'auto',
+                  }}
+                >
+                  Register Here
+                </Button>
+              </Box>
+              <Button
+                variant="text"
+                onClick={() => navigate('/admin/login')}
+                sx={{
+                  color: colors.textSecondary,
+                  textTransform: 'none',
+                  fontSize: '0.85rem',
+                  mt: 1,
+                }}
+              >
+                Admin Login
+              </Button>
+            </Box>
+          </CardContent>
+        </Card>
+      </Box>
     </Box>
   );
 }
