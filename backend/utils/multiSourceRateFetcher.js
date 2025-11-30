@@ -22,7 +22,7 @@ const fetchFromRBGoldspot = async () => {
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache'
       },
-      timeout: 10000,
+      timeout: 5000, // Reduced for serverless (Vercel has 10s limit)
       maxRedirects: 5,
       responseType: 'text',
       params: { 
@@ -197,7 +197,7 @@ const fetchFromVercel = async () => {
         'Pragma': 'no-cache',
         'Expires': '0'
       },
-      timeout: 10000, // 10 seconds - more time for reliable fetch
+      timeout: 5000, // Reduced for serverless (Vercel has 10s limit)
       maxRedirects: 5,
       responseType: 'text',
       params: {

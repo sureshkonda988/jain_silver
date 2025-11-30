@@ -82,11 +82,12 @@ const updateRatesFromEndpoints = async () => {
   try {
     const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
     
-    // Fetch with timeout
+    // Fetch with timeout (reduced for serverless - Vercel has 10s limit)
+    // Use 5 seconds to leave room for other processing
     const liveRate = await Promise.race([
       fetchSilverRatesFromMultipleSources(),
       new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout after 10 seconds')), 10000)
+        setTimeout(() => reject(new Error('Timeout after 5 seconds')), 5000)
       )
     ]);
 
@@ -249,8 +250,37 @@ router.get('/', async (req, res) => {
     updateRatesFromEndpoints().catch(() => {});
     
     // ALWAYS try to get rates from MongoDB first (primary source)
+    // In serverless, we need to ensure connection on each request
     try {
       const mongoose = require('mongoose');
+      
+      // For serverless (Vercel), ensure connection on each request
+      if (mongoose.connection.readyState !== 1) {
+        // Try to connect if not connected (serverless cold start)
+        try {
+          const mongoURI = process.env.MONGODB_URI;
+          if (mongoURI) {
+            // Quick connection attempt with short timeout for serverless
+            await Promise.race([
+              mongoose.connect(mongoURI, {
+                useNewUrlParser: true,
+                useUnifiedTopology: true,
+                serverSelectionTimeoutMS: 3000, // 3 seconds for serverless
+                socketTimeoutMS: 10000,
+                maxPoolSize: 1, // Single connection for serverless
+                minPoolSize: 0
+              }),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('MongoDB connection timeout')), 3000)
+              )
+            ]);
+            console.log('✅ MongoDB connected on request');
+          }
+        } catch (connErr) {
+          console.warn('⚠️ MongoDB connection failed on request:', connErr.message);
+        }
+      }
+      
       if (mongoose.connection.readyState === 1) {
         const mongoRates = await SilverRate.find({ location: 'Andhra Pradesh' })
           .sort({ name: 1 })
