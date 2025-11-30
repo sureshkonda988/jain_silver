@@ -265,6 +265,15 @@ const ensureDBConnection = async () => {
 // Make helper available to routes
 app.locals.ensureDBConnection = ensureDBConnection;
 
+// Handle favicon requests (prevent 404 errors)
+app.get('/favicon.ico', (req, res) => {
+  res.status(204).end(); // No Content
+});
+
+app.get('/favicon.png', (req, res) => {
+  res.status(204).end(); // No Content
+});
+
 // Root route
 app.get('/', (req, res) => {
   res.json({
