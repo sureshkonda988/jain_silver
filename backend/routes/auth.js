@@ -789,33 +789,7 @@ router.post('/signin',
         return res.status(401).json({ message: 'Invalid credentials' });
       }
 
-      // Check if user is approved - ONLY approved users can sign in
-      if (user.status !== 'approved') {
-        console.warn('❌ Login attempt by unapproved user:', { 
-          email: user.email, 
-          status: user.status,
-          isVerified: user.isVerified 
-        });
-        
-        if (user.status === 'rejected') {
-          return res.status(403).json({ 
-            message: 'Your account has been rejected. Please contact admin for assistance.',
-            status: user.status
-          });
-        } else if (user.status === 'pending') {
-          return res.status(403).json({ 
-            message: 'Your account is pending admin approval. Please wait for approval before signing in.',
-            status: user.status
-          });
-        } else {
-          return res.status(403).json({ 
-            message: 'Your account is not approved. Please contact admin.',
-            status: user.status
-          });
-        }
-      }
-
-      // Generate token - only for approved users (OTP verification removed)
+      // Generate token - all users can sign in (OTP and approval checks removed)
       const token = generateToken(user._id);
 
       console.log('✅ Sign in successful:', { email: user.email, status: user.status });
