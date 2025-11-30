@@ -65,6 +65,11 @@ const calculateSmoothedRate = (newRate) => {
 
 // Update rates from endpoints (non-blocking)
 const updateRatesFromEndpoints = async () => {
+  // Skip on serverless - rate updates should be handled externally
+  if (process.env.VERCEL) {
+    return; // Don't fetch on serverless to avoid timeouts
+  }
+  
   const now = Date.now();
   
   // Prevent too frequent updates (max once per second)
@@ -83,11 +88,11 @@ const updateRatesFromEndpoints = async () => {
     const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
     
     // Fetch with timeout (reduced for serverless - Vercel has 10s limit)
-    // Use 5 seconds to leave room for other processing
+    // Use 3 seconds to leave room for other processing
     const liveRate = await Promise.race([
       fetchSilverRatesFromMultipleSources(),
       new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout after 5 seconds')), 5000)
+        setTimeout(() => reject(new Error('Timeout after 3 seconds')), 3000)
       )
     ]);
 
@@ -246,8 +251,12 @@ router.get('/', async (req, res) => {
       // Continue without auth
     }
     
-    // Trigger background update (non-blocking)
-    updateRatesFromEndpoints().catch(() => {});
+    // Trigger background update (non-blocking) - but skip on serverless to avoid timeouts
+    // On serverless, rate updates should be handled by a separate cron job or external service
+    if (!process.env.VERCEL) {
+      // Only run background fetch on non-serverless platforms
+      updateRatesFromEndpoints().catch(() => {});
+    }
     
     // ALWAYS try to get rates from MongoDB first (primary source)
     // In serverless, we need to ensure connection on each request
