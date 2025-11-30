@@ -469,7 +469,8 @@ router.post('/force-update', auth, async (req, res) => {
 
 // Dedicated endpoint for cron jobs to update rates (no auth required for cron)
 // This endpoint is designed to be called by Vercel Cron or external services
-router.post('/update', async (req, res) => {
+// Also supports GET method for easy manual triggering
+const updateRatesHandler = async (req, res) => {
   const startTime = Date.now();
   try {
     console.log('🔄 Cron job triggered: Updating rates...');
@@ -633,7 +634,11 @@ router.post('/update', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   }
-});
+};
+
+// Support both POST and GET for manual triggering
+router.post('/update', updateRatesHandler);
+router.get('/update', updateRatesHandler);
 
 // Initialize rates - loads from MongoDB
 router.post('/initialize', async (req, res) => {
