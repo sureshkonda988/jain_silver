@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Card, CardContent, Typography, Button, Divider, Chip, Alert, Grid } from '@mui/material';
-import { Logout, AccountCircle, Phone, Store, AccountBalance } from '@mui/icons-material';
+import { Logout, AccountCircle, Phone, Store, AccountBalance, Verified, Star, Info } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthContext';
 import api from '../config/api';
 import colors from '../theme/colors';
@@ -99,20 +99,7 @@ function ProfilePage() {
             <Grid item xs={12} sm={6}>
               <Box sx={{ mb: 2 }}>
                 <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>Phone</Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography variant="body1">{profile?.phone || user?.phone || 'N/A'}</Typography>
-                  {(profile?.phone || user?.phone) && (
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      startIcon={<Phone />}
-                      onClick={() => handlePhoneCall(profile?.phone || user?.phone)}
-                      sx={{ ml: 1 }}
-                    >
-                      Call
-                    </Button>
-                  )}
-                </Box>
+                <Typography variant="body1">{profile?.phone || user?.phone || 'N/A'}</Typography>
               </Box>
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -141,6 +128,96 @@ function ProfilePage() {
                 </Box>
               </Grid>
             )}
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>Account Type</Typography>
+                <Chip
+                  label={profile?.role === 'admin' ? 'Administrator' : 'Customer'}
+                  size="small"
+                  sx={{
+                    backgroundColor: profile?.role === 'admin' ? colors.primary : colors.primaryVeryLight,
+                    color: profile?.role === 'admin' ? 'white' : colors.textPrimary,
+                    fontWeight: 600
+                  }}
+                />
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>Verification Status</Typography>
+                <Chip
+                  icon={profile?.isVerified ? <Verified /> : null}
+                  label={profile?.isVerified ? 'Verified' : 'Not Verified'}
+                  size="small"
+                  sx={{
+                    backgroundColor: profile?.isVerified ? colors.success + '20' : colors.warning + '20',
+                    color: profile?.isVerified ? colors.success : colors.warning,
+                    fontWeight: 600
+                  }}
+                />
+              </Box>
+            </Grid>
+            {profile?.createdAt && (
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>Member Since</Typography>
+                  <Typography variant="body1">
+                    {new Date(profile.createdAt).toLocaleDateString('en-IN', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </Typography>
+                </Box>
+              </Grid>
+            )}
+            {profile?.approvedAt && (
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>Account Approved</Typography>
+                  <Typography variant="body1">
+                    {new Date(profile.approvedAt).toLocaleDateString('en-IN', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </Typography>
+                </Box>
+              </Grid>
+            )}
+            {profile?.updatedAt && (
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>Last Updated</Typography>
+                  <Typography variant="body1">
+                    {new Date(profile.updatedAt).toLocaleDateString('en-IN', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </Typography>
+                </Box>
+              </Grid>
+            )}
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>Documents Uploaded</Typography>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 0.5 }}>
+                  {profile?.documents?.aadhar?.front && profile?.documents?.aadhar?.back ? (
+                    <Chip label="Aadhar" size="small" color="success" />
+                  ) : (
+                    <Chip label="Aadhar" size="small" color="default" />
+                  )}
+                  {profile?.documents?.pan?.image ? (
+                    <Chip label="PAN" size="small" color="success" />
+                  ) : (
+                    <Chip label="PAN" size="small" color="default" />
+                  )}
+                </Box>
+              </Box>
+            </Grid>
           </Grid>
         </CardContent>
       </Card>
@@ -218,6 +295,55 @@ function ProfilePage() {
           </CardContent>
         </Card>
       )}
+
+      {/* About Jain Silver Plaza Card */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <Info sx={{ mr: 1, color: colors.primary, fontSize: 32 }} />
+            <Typography variant="h5" sx={{ fontWeight: 700 }}>
+              About Jain Silver Plaza
+            </Typography>
+          </Box>
+          <Divider sx={{ mb: 2 }} />
+          <Typography variant="body1" sx={{ mb: 2, lineHeight: 1.8 }}>
+            <strong>Jain Silver Plaza</strong> is recognized as one of the <strong>best silver shops in Vijayawada</strong>. 
+            We specialize in premium quality silver coins, bars, and exquisite jewelry with transparent pricing 
+            and excellent customer service.
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, p: 1.5, backgroundColor: colors.primaryVeryLight, borderRadius: 2, width: 'fit-content' }}>
+            <Star sx={{ color: '#FFC107', mr: 1 }} />
+            <Typography variant="h6" sx={{ mr: 1, fontWeight: 700 }}>4.4</Typography>
+            <Typography variant="body2" sx={{ color: colors.textSecondary }}>(84+ Customer Reviews)</Typography>
+          </Box>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <Verified sx={{ color: colors.success, mr: 1, fontSize: 20 }} />
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>Authentic Silver Products</Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <Verified sx={{ color: colors.success, mr: 1, fontSize: 20 }} />
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>Live Market Rates</Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <Verified sx={{ color: colors.success, mr: 1, fontSize: 20 }} />
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>Secure Transactions</Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <Verified sx={{ color: colors.success, mr: 1, fontSize: 20 }} />
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>Expert Customer Service</Typography>
+              </Box>
+            </Grid>
+          </Grid>
+        </CardContent>
+      </Card>
 
       {/* Logout Button */}
       <Card>

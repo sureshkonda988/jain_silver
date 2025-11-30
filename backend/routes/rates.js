@@ -6,6 +6,41 @@ const SilverRate = require('../models/SilverRate');
 // In-memory store for manual adjustments (per rate type)
 let manualAdjustments = {};
 
+// Helper function to apply manual adjustments to rates
+const applyManualAdjustments = (rates) => {
+  return rates.map(rate => {
+    const manualAdjustment = manualAdjustments[rate.name]?.manualAdjustment || 0;
+    // Store original rates before adjustment
+    const originalRatePerGram = rate.ratePerGram;
+    let originalTotalRate = rate.rate;
+    
+    // If there's a manual adjustment, recalculate the rate
+    if (manualAdjustment !== 0) {
+      const adjustedRatePerGram = Math.max(0, Math.round((rate.ratePerGram + manualAdjustment) * 100) / 100);
+      let weightInGrams = rate.weight.value;
+      if (rate.weight.unit === 'kg') {
+        weightInGrams = rate.weight.value * 1000;
+      }
+      const adjustedTotalRate = Math.round(adjustedRatePerGram * weightInGrams * 100) / 100;
+      
+      return {
+        ...rate,
+        ratePerGram: adjustedRatePerGram,
+        rate: adjustedTotalRate,
+        originalRatePerGram: originalRatePerGram, // Store original for display
+        originalRate: originalTotalRate, // Store original total rate
+        manualAdjustment: manualAdjustment
+      };
+    }
+    return {
+      ...rate,
+      originalRatePerGram: originalRatePerGram, // Even without adjustment, store original
+      originalRate: originalTotalRate,
+      manualAdjustment: rate.manualAdjustment || 0
+    };
+  });
+};
+
 // Cache for live base rate (updated on every request)
 let cachedBaseRate = {
   ratePerGram: 169.0, // Default fallback rate
@@ -331,7 +366,8 @@ router.get('/', async (req, res) => {
                     .sort({ name: 1 })
                     .lean();
                   if (retryRates && retryRates.length > 0) {
-                    const ratesWithUSD = retryRates.map(rate => ({
+                    const ratesWithAdjustments = applyManualAdjustments(retryRates);
+                    const ratesWithUSD = ratesWithAdjustments.map(rate => ({
                       ...rate,
                       usdInrRate: cachedBaseRate.usdInrRate || 89.25
                     }));
@@ -349,10 +385,11 @@ router.get('/', async (req, res) => {
                   const freshAge = Date.now() - new Date(freshLatest.lastUpdated).getTime();
                   console.log(`✅ Fresh rates loaded: ${freshRates.length} rates (${Math.round(freshAge/1000)}s old, latest: ${freshLatest.name} = ₹${freshLatest.ratePerGram}/gram)`);
                   
-                  const ratesWithUSD = freshRates.map(rate => ({
-                    ...rate,
-                    usdInrRate: cachedBaseRate.usdInrRate || 89.25
-                  }));
+                  const ratesWithAdjustments = applyManualAdjustments(freshRates);
+                  const ratesWithUSD = ratesWithAdjustments.map(rate => ({
+                      ...rate,
+                      usdInrRate: cachedBaseRate.usdInrRate || 89.25
+                    }));
                   res.set({
                     'Cache-Control': 'no-cache, no-store, must-revalidate',
                     'Pragma': 'no-cache',
@@ -389,7 +426,8 @@ router.get('/', async (req, res) => {
                 const freshAge = Date.now() - new Date(freshLatest.lastUpdated).getTime();
                 console.log(`✅ Fresh rates fetched: ${freshRates.length} rates (${Math.round(freshAge/1000)}s old, latest: ${freshLatest.name} = ₹${freshLatest.ratePerGram}/gram)`);
                 
-                const ratesWithUSD = freshRates.map(rate => ({
+                const ratesWithAdjustments = applyManualAdjustments(freshRates);
+                const ratesWithUSD = ratesWithAdjustments.map(rate => ({
                   ...rate,
                   usdInrRate: cachedBaseRate.usdInrRate || 89.25
                 }));
@@ -425,7 +463,8 @@ router.get('/', async (req, res) => {
                 .sort({ name: 1 })
                 .lean();
               if (freshRates && freshRates.length > 0) {
-                const ratesWithUSD = freshRates.map(rate => ({
+                const ratesWithAdjustments = applyManualAdjustments(freshRates);
+                const ratesWithUSD = ratesWithAdjustments.map(rate => ({
                   ...rate,
                   usdInrRate: cachedBaseRate.usdInrRate || 89.25
                 }));
@@ -450,8 +489,12 @@ router.get('/', async (req, res) => {
             console.log(`📦 Serving ${mongoRates.length} rates from MongoDB (${Math.round(mongoAge/1000)}s old, latest: ${latestRate.name} = ₹${latestRate.ratePerGram}/gram)`);
           }
           
+          // Apply manual adjustments to rates from MongoDB
+          // This ensures admin adjustments are reflected immediately
+          const ratesWithAdjustments = applyManualAdjustments(mongoRates);
+          
           // Add USD rate to all rates if available
-          const ratesWithUSD = mongoRates.map(rate => ({
+          const ratesWithUSD = ratesWithAdjustments.map(rate => ({
             ...rate,
             usdInrRate: cachedBaseRate.usdInrRate || 89.25
           }));
@@ -535,6 +578,14 @@ router.get('/', async (req, res) => {
       const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
       const id = Buffer.from(rateDef.name).toString('base64').substring(0, 24);
       
+      // Store original rate before adjustment
+      const originalRatePerGram = ratePerGram - manualAdjustment;
+      let originalWeightInGrams = rateDef.weight.value;
+      if (rateDef.weight.unit === 'kg') {
+        originalWeightInGrams = rateDef.weight.value * 1000;
+      }
+      const originalTotalRate = Math.round(originalRatePerGram * originalWeightInGrams * 100) / 100;
+      
       return {
         _id: id,
         name: rateDef.name,
@@ -543,6 +594,8 @@ router.get('/', async (req, res) => {
         purity: rateDef.purity,
         ratePerGram: ratePerGram,
         rate: totalRate,
+        originalRatePerGram: originalRatePerGram,
+        originalRate: originalTotalRate,
         lastUpdated: currentTime,
         usdInrRate: cachedBaseRate.usdInrRate,
         source: cachedBaseRate.source,
@@ -1047,6 +1100,7 @@ router.post('/adjust', auth, async (req, res) => {
 
 module.exports = router;
 module.exports.manualAdjustments = manualAdjustments;
+module.exports.updateRatesHandler = updateRatesHandler;
 module.exports.updateRatesFromEndpoints = updateRatesFromEndpoints;
 module.exports.getCachedBaseRate = () => cachedBaseRate;
 module.exports.setCachedBaseRate = (rate) => { cachedBaseRate = rate; };

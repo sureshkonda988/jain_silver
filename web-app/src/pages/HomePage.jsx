@@ -29,6 +29,16 @@ function HomePage() {
   const pollingIntervalRef = React.useRef(null);
   const currentRequestRef = React.useRef(null);
 
+  // Check if rates are default/old (₹169) - should show fetching instead
+  const areRatesDefault = (ratesToCheck) => {
+    if (!ratesToCheck || ratesToCheck.length === 0) return true;
+    // Check if any 99.9% rate is the default ₹169 (or close to it)
+    const OLD_RATE_THRESHOLD = 170;
+    return ratesToCheck.some(rate => 
+      rate.purity === '99.9%' && rate.ratePerGram < OLD_RATE_THRESHOLD
+    );
+  };
+
   useEffect(() => {
     fetchRates();
     startPolling();
@@ -82,8 +92,15 @@ function HomePage() {
       const updateTime = new Date();
 
       if (newRates && Array.isArray(newRates) && newRates.length > 0) {
+        // Check if rates are default/old - if so, keep loading state
+        if (areRatesDefault(newRates)) {
+          console.log('⏳ Rates are still default (₹169), waiting for fresh rates...');
+          setLoading(true); // Keep loading state
+          return; // Don't update rates yet
+        }
+        
         setLastUpdateTime(updateTime);
-        setLoading(false);
+        setLoading(false); // Rates are fresh, stop loading
 
         setRates((prevRates) => {
           const updatedRates = newRates.map((newRate) => {
@@ -184,11 +201,21 @@ function HomePage() {
         params: { _t: Date.now() } // Cache busting
       });
       if (response.data && Array.isArray(response.data) && response.data.length > 0) {
-        setRates(response.data);
-        setLastUpdateTime(new Date());
-        console.log(`✅ Loaded ${response.data.length} silver rates`);
+        // Check if rates are default/old - if so, keep loading state
+        if (areRatesDefault(response.data)) {
+          console.log('⏳ Initial rates are default (₹169), waiting for fresh rates...');
+          setLoading(true); // Keep loading state
+          setRates([]); // Don't show default rates
+          // Will be updated by polling
+        } else {
+          setRates(response.data);
+          setLastUpdateTime(new Date());
+          setLoading(false);
+          console.log(`✅ Loaded ${response.data.length} silver rates`);
+        }
       } else {
         console.warn('⚠️ Unexpected response format:', response.data);
+        setLoading(false);
       }
     } catch (error) {
       const errorMsg = error.response?.data?.message || error.message || 'Network Error';
@@ -246,18 +273,21 @@ function HomePage() {
   const getProductImage = (type, name) => {
     const iconType = getTypeIcon(type, name);
     if (iconType === 'coin-image') {
-      return 'https://thumbs.dreamstime.com/b/silver-coin-isolated-white-background-366350738.jpg';
+      return '/silver-coin.jpg';
     }
     if (iconType === 'bar-image') {
-      return 'https://thumbs.dreamstime.com/b/four-cast-silver-bars-isolated-white-background-366350738.jpg';
+      return '/silver-bars.webp';
     }
     return null;
   };
 
-  if (loading && rates.length === 0) {
+  if (loading || areRatesDefault(rates)) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', gap: 2 }}>
         <CircularProgress />
+        <Typography variant="body1" sx={{ color: colors.textSecondary }}>
+          Fetching live rates...
+        </Typography>
       </Box>
     );
   }
@@ -322,16 +352,20 @@ function HomePage() {
                       <CardContent>
                         <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                           {productImage ? (
-                            <Avatar
+                            <Box
+                              component="img"
                               src={productImage}
                               alt={rate.name}
-                              variant="rounded"
                               sx={{
                                 width: 56,
                                 height: 56,
                                 mr: 2,
                                 flexShrink: 0,
+                                borderRadius: 2,
+                                objectFit: 'cover',
                                 backgroundColor: colors.primaryVeryLight,
+                                border: `1px solid ${colors.border}`,
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                               }}
                               onError={(e) => {
                                 e.target.style.display = 'none';

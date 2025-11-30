@@ -17,10 +17,25 @@ function AdminDashboardPage() {
   const [adjustAmount, setAdjustAmount] = useState('');
   const [adjustType, setAdjustType] = useState('increase'); // 'increase' or 'decrease'
   const [loadingAction, setLoadingAction] = useState(false);
+  const [rates, setRates] = useState([]);
+  const [loadingRates, setLoadingRates] = useState(false);
 
   useEffect(() => {
     fetchUsers();
+    fetchRates();
   }, []);
+
+  const fetchRates = async () => {
+    try {
+      setLoadingRates(true);
+      const response = await api.get('/rates');
+      setRates(response.data || []);
+    } catch (error) {
+      console.error('Error fetching rates:', error);
+    } finally {
+      setLoadingRates(false);
+    }
+  };
 
   const fetchUsers = async () => {
     try {
@@ -123,6 +138,8 @@ function AdminDashboardPage() {
       alert(`Rates ${adjustType === 'decrease' ? 'decreased' : 'increased'} by ₹${amount}/gram successfully`);
       setAdjustDialogOpen(false);
       setAdjustAmount('');
+      // Refresh rates to show updated values
+      await fetchRates();
     } catch (error) {
       alert(error.response?.data?.message || 'Failed to adjust rates');
     } finally {
@@ -181,6 +198,100 @@ function AdminDashboardPage() {
               Increase Rates
             </Button>
           </Box>
+        </CardContent>
+      </Card>
+
+      {/* Current Rates Display Card */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>Current Silver Rates</Typography>
+            <Button size="small" onClick={fetchRates} disabled={loadingRates}>
+              Refresh
+            </Button>
+          </Box>
+          {loadingRates ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+              <CircularProgress size={24} />
+            </Box>
+          ) : rates.length > 0 ? (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700 }}>Product</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>Normal Price</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>Adjusted Price</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>Adjustment</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {rates.map((rate) => {
+                    const hasAdjustment = rate.manualAdjustment && rate.manualAdjustment !== 0;
+                    const normalPrice = rate.originalRate || rate.rate;
+                    const adjustedPrice = rate.rate;
+                    const adjustment = rate.manualAdjustment || 0;
+                    
+                    return (
+                      <TableRow key={rate._id || rate.name}>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {rate.name}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: colors.textSecondary }}>
+                            {rate.purity} • {rate.weight?.value} {rate.weight?.unit}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                            ₹{normalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block' }}>
+                            ₹{rate.originalRatePerGram?.toFixed(2) || rate.ratePerGram.toFixed(2)}/gram
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              fontWeight: hasAdjustment ? 600 : 400,
+                              color: hasAdjustment ? (adjustment > 0 ? colors.success : colors.error) : colors.textPrimary
+                            }}
+                          >
+                            ₹{adjustedPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block' }}>
+                            ₹{rate.ratePerGram.toFixed(2)}/gram
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          {hasAdjustment ? (
+                            <Chip
+                              label={`${adjustment > 0 ? '+' : ''}₹${adjustment.toFixed(2)}/gram`}
+                              size="small"
+                              sx={{
+                                backgroundColor: adjustment > 0 ? colors.success : colors.error,
+                                color: 'white',
+                                fontWeight: 600
+                              }}
+                            />
+                          ) : (
+                            <Typography variant="caption" sx={{ color: colors.textSecondary }}>
+                              No adjustment
+                            </Typography>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Typography variant="body2" sx={{ color: colors.textSecondary, textAlign: 'center', p: 2 }}>
+              No rates available
+            </Typography>
+          )}
         </CardContent>
       </Card>
 

@@ -257,6 +257,20 @@ router.post('/adjust-rates', auth, adminAuth, async (req, res) => {
 
     console.log(`✅ Admin adjusted rates: ${amount > 0 ? '+' : ''}₹${amount}/gram applied to ${modified} rates`);
 
+    // Trigger immediate rate update to apply adjustments to MongoDB
+    try {
+      const updateRatesHandler = require('./rates').updateRatesHandler || null;
+      if (updateRatesHandler) {
+        // Call update handler without waiting (non-blocking) to update MongoDB with adjustments
+        updateRatesHandler(req, null).catch(err => {
+          console.error('⚠️ Failed to trigger rate update after adjustment:', err.message);
+        });
+        console.log('🔄 Triggered rate update to apply adjustments to MongoDB');
+      }
+    } catch (updateErr) {
+      console.warn('⚠️ Could not trigger rate update:', updateErr.message);
+    }
+
     // Emit socket event for clients
     const io = req.app.get('io');
     if (io) io.emit('manualAdjustment', { amount });
@@ -265,7 +279,7 @@ router.post('/adjust-rates', auth, adminAuth, async (req, res) => {
       message: `Rates ${amount > 0 ? 'increased' : 'decreased'} by ₹${Math.abs(amount)}/gram`,
       modifiedCount: modified, 
       amount,
-      note: 'Adjustment will be applied to live rates from RB Goldspot/Vercel endpoints'
+      note: 'Adjustment applied and rates are being updated in the database'
     });
   } catch (error) {
     console.error('Admin adjust rates error:', error);

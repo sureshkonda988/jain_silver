@@ -529,7 +529,7 @@ router.post('/register',
         },
         status: 'pending',
         role: 'user', // Explicitly set role to 'user'
-        isVerified: false // Will be set to true after OTP verification
+        isVerified: true // Auto-verify users (OTP verification removed)
       });
 
       try {
@@ -568,9 +568,9 @@ router.post('/register',
       }
 
       res.status(201).json({
-        message: 'Registration successful. Please verify OTP.',
+        message: 'Registration successful. Your account is pending admin approval.',
         userId: user._id,
-        otp: otp // Remove this in production
+        note: 'You can sign in once your account is approved by admin.'
       });
     } catch (error) {
       console.error('❌ Registration error:', error.message);
@@ -815,16 +815,7 @@ router.post('/signin',
         }
       }
 
-      // Check if user is verified (OTP verified)
-      if (!user.isVerified) {
-        console.warn('❌ Login attempt by unverified user:', { email: user.email });
-        return res.status(403).json({ 
-          message: 'Please verify your OTP before signing in. Check your email for OTP or request a new one.',
-          status: 'unverified'
-        });
-      }
-
-      // Generate token - only for approved and verified users
+      // Generate token - only for approved users (OTP verification removed)
       const token = generateToken(user._id);
 
       console.log('✅ Sign in successful:', { email: user.email, status: user.status });

@@ -77,10 +77,8 @@ function RegisterPage() {
       const responseData = await response.json();
 
       if (response.ok && responseData.userId) {
-        alert('Registration Successful! Please wait for admin approval.');
-        navigate('/otp-verification', {
-          state: { userId: responseData.userId, demoOTP: responseData.otp },
-        });
+        alert('Registration Successful! Your account is pending admin approval. You can sign in once your account is approved.');
+        navigate('/');
       } else {
         setError(responseData.message || 'Registration failed');
       }

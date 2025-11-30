@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Card, CardContent, Typography, Button, Divider, Chip, Grid } from '@mui/material';
-import { LocationOn, Phone, Star, AccessTime, Share, CheckCircle, Instagram, Facebook, YouTube } from '@mui/icons-material';
+import { LocationOn, Phone, Star, AccessTime, Share, CheckCircle, Instagram, Facebook, YouTube, Verified, LocalShipping, Security, TrendingUp, EmojiEvents } from '@mui/icons-material';
 import api from '../config/api';
 import colors from '../theme/colors';
 
@@ -87,42 +87,123 @@ function NewsPage() {
             <Typography variant="h6" sx={{ mr: 1, fontWeight: 700 }}>4.4</Typography>
             <Typography variant="body2" sx={{ color: colors.textSecondary }}>(84 Ratings)</Typography>
           </Box>
-          <Typography variant="body1" sx={{ mb: 2, lineHeight: 1.8 }}>
-            Jain Silver Plaza is a trusted name in silver jewellery manufacturing and retail. 
-            We specialize in premium quality silver coins, bars, and exquisite jewellery pieces. 
-            Located in the heart of Vijayawada, we have been serving customers with authentic 
-            silver products and transparent pricing for years.
+          <Typography variant="body1" sx={{ mb: 2, lineHeight: 1.8, fontWeight: 500 }}>
+            Jain Silver Plaza is recognized as one of the <strong>best silver shops in Vijayawada</strong> and Andhra Pradesh. 
+            With years of experience in silver jewellery manufacturing and retail, we have built a reputation for 
+            excellence, authenticity, and customer satisfaction. Our commitment to quality and transparency has made 
+            us a trusted name in the silver industry.
           </Typography>
           <Typography variant="body1" sx={{ mb: 2, lineHeight: 1.8 }}>
-            Our showroom offers a wide range of silver products including coins, bars, and 
-            custom jewellery designs. We maintain the highest standards of quality and 
-            provide excellent customer service to ensure your complete satisfaction.
+            We specialize in premium quality silver coins, bars, and exquisite jewellery pieces. Located in the 
+            heart of Vijayawada, we have been serving customers with authentic silver products and transparent 
+            pricing for years. Our showroom offers a wide range of silver products including coins, bars, and 
+            custom jewellery designs.
+          </Typography>
+          <Typography variant="body1" sx={{ mb: 2, lineHeight: 1.8 }}>
+            We maintain the highest standards of quality and provide excellent customer service to ensure your 
+            complete satisfaction. Every product is certified for purity and authenticity, giving you peace of 
+            mind with your investment.
           </Typography>
           <Box sx={{ mt: 3, pt: 2, borderTop: `1px solid ${colors.divider}` }}>
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 700, color: colors.primaryDark }}>
+              Why Choose Jain Silver Plaza?
+            </Typography>
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <CheckCircle sx={{ color: colors.success, mr: 1, fontSize: 20 }} />
-                  <Typography variant="body2" sx={{ fontWeight: 500 }}>Authentic Silver Products</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, p: 1.5, backgroundColor: colors.primaryVeryLight, borderRadius: 2 }}>
+                  <Verified sx={{ color: colors.success, mr: 1.5, fontSize: 24 }} />
+                  <Box>
+                    <Typography variant="body1" sx={{ fontWeight: 600, mb: 0.5 }}>Authentic Silver Products</Typography>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>100% certified purity guaranteed</Typography>
+                  </Box>
                 </Box>
               </Grid>
               <Grid item xs={12} sm={6}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <CheckCircle sx={{ color: colors.success, mr: 1, fontSize: 20 }} />
-                  <Typography variant="body2" sx={{ fontWeight: 500 }}>Transparent Pricing</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, p: 1.5, backgroundColor: colors.primaryVeryLight, borderRadius: 2 }}>
+                  <TrendingUp sx={{ color: colors.success, mr: 1.5, fontSize: 24 }} />
+                  <Box>
+                    <Typography variant="body1" sx={{ fontWeight: 600, mb: 0.5 }}>Live Market Rates</Typography>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>Real-time pricing updated every second</Typography>
+                  </Box>
                 </Box>
               </Grid>
               <Grid item xs={12} sm={6}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <CheckCircle sx={{ color: colors.success, mr: 1, fontSize: 20 }} />
-                  <Typography variant="body2" sx={{ fontWeight: 500 }}>Expert Craftsmanship</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, p: 1.5, backgroundColor: colors.primaryVeryLight, borderRadius: 2 }}>
+                  <Security sx={{ color: colors.success, mr: 1.5, fontSize: 24 }} />
+                  <Box>
+                    <Typography variant="body1" sx={{ fontWeight: 600, mb: 0.5 }}>Secure Transactions</Typography>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>Safe and reliable payment options</Typography>
+                  </Box>
                 </Box>
               </Grid>
               <Grid item xs={12} sm={6}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <CheckCircle sx={{ color: colors.success, mr: 1, fontSize: 20 }} />
-                  <Typography variant="body2" sx={{ fontWeight: 500 }}>Customer Satisfaction</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, p: 1.5, backgroundColor: colors.primaryVeryLight, borderRadius: 2 }}>
+                  <LocalShipping sx={{ color: colors.success, mr: 1.5, fontSize: 24 }} />
+                  <Box>
+                    <Typography variant="body1" sx={{ fontWeight: 600, mb: 0.5 }}>Expert Service</Typography>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>Professional guidance and support</Typography>
+                  </Box>
                 </Box>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, p: 1.5, backgroundColor: colors.primaryVeryLight, borderRadius: 2 }}>
+                  <EmojiEvents sx={{ color: colors.success, mr: 1.5, fontSize: 24 }} />
+                  <Box>
+                    <Typography variant="body1" sx={{ fontWeight: 600, mb: 0.5 }}>Best Silver Shop</Typography>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>Top-rated in Vijayawada</Typography>
+                  </Box>
+                </Box>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, p: 1.5, backgroundColor: colors.primaryVeryLight, borderRadius: 2 }}>
+                  <CheckCircle sx={{ color: colors.success, mr: 1.5, fontSize: 24 }} />
+                  <Box>
+                    <Typography variant="body1" sx={{ fontWeight: 600, mb: 0.5 }}>Customer Satisfaction</Typography>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>4.4⭐ rating with 84+ reviews</Typography>
+                  </Box>
+                </Box>
+              </Grid>
+            </Grid>
+          </Box>
+          
+          {/* Services Section */}
+          <Box sx={{ mt: 3, pt: 2, borderTop: `1px solid ${colors.divider}` }}>
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 700, color: colors.primaryDark }}>
+              Our Services
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={4}>
+                <Card sx={{ height: '100%', backgroundColor: colors.primaryVeryLight }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>💰 Silver Coins</Typography>
+                    <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                      Premium quality silver coins in various weights (1g, 5g, 10g, 50g, 100g) with 99.9% purity. 
+                      Perfect for investment and gifting.
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Card sx={{ height: '100%', backgroundColor: colors.primaryVeryLight }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>📦 Silver Bars</Typography>
+                    <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                      High-purity silver bars (100g, 500g, 1kg) with 99.99% purity. Ideal for serious investors 
+                      looking for bulk silver purchases.
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Card sx={{ height: '100%', backgroundColor: colors.primaryVeryLight }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>💍 Silver Jewelry</Typography>
+                    <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                      Exquisite handcrafted silver jewelry in 92.5% and 99.9% purity. Custom designs available 
+                      to match your style and preferences.
+                    </Typography>
+                  </CardContent>
+                </Card>
               </Grid>
             </Grid>
           </Box>
@@ -261,15 +342,23 @@ function NewsPage() {
               </Typography>
             </Box>
             <Divider sx={{ mb: 2 }} />
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography variant="h6" sx={{ fontWeight: 600 }}>{storeInfo.phoneNumber}</Typography>
+            <Typography variant="body1" sx={{ mb: 2, lineHeight: 1.8 }}>
+              Visit our showroom or call us for the best silver rates in Vijayawada. Our expert team is ready 
+              to assist you with all your silver needs. We offer competitive pricing, authentic products, and 
+              excellent customer service.
+            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
+              <Box>
+                <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>Store Phone</Typography>
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>{storeInfo.phoneNumber}</Typography>
+              </Box>
               <Button
                 variant="contained"
                 startIcon={<Phone />}
                 onClick={() => handlePhoneCall(storeInfo.phoneNumber)}
                 sx={{ backgroundColor: colors.primary }}
               >
-                Call
+                Call Now
               </Button>
             </Box>
           </CardContent>
