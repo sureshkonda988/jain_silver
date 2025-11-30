@@ -766,9 +766,23 @@ const updateRatesHandler = async (req, res = null) => {
       const verifyAge = Date.now() - new Date(verifyRate.lastUpdated).getTime();
       console.log(`✅ VERIFICATION: Latest rate "${verifyRate.name}" = ₹${verifyRate.ratePerGram}/gram (updated ${Math.round(verifyAge/1000)}s ago)`);
       
-      // Warn if verified rate doesn't match what we just updated
-      if (Math.abs(verifyRate.ratePerGram - baseRatePerGram) > 1) {
-        console.warn(`⚠️ WARNING: Verified rate (₹${verifyRate.ratePerGram}/gram) doesn't match base rate (₹${baseRatePerGram.toFixed(2)}/gram)!`);
+      // Calculate expected rate for this specific rate type (accounting for purity adjustments)
+      let expectedRatePerGram = baseRatePerGram;
+      if (verifyRate.purity === '92.5%') {
+        expectedRatePerGram = baseRatePerGram * 0.96;
+      } else if (verifyRate.purity === '99.99%') {
+        expectedRatePerGram = baseRatePerGram * 1.005;
+      }
+      const manualAdj = manualAdjustments[verifyRate.name]?.manualAdjustment || 0;
+      expectedRatePerGram = expectedRatePerGram + manualAdj;
+      expectedRatePerGram = Math.round(expectedRatePerGram * 100) / 100;
+      
+      // Warn if verified rate doesn't match expected rate (with tolerance for rounding)
+      const difference = Math.abs(verifyRate.ratePerGram - expectedRatePerGram);
+      if (difference > 0.1) { // Allow 0.1 difference for rounding
+        console.warn(`⚠️ WARNING: Verified rate "${verifyRate.name}" (₹${verifyRate.ratePerGram}/gram) doesn't match expected (₹${expectedRatePerGram.toFixed(2)}/gram, base: ₹${baseRatePerGram.toFixed(2)}/gram, diff: ₹${difference.toFixed(2)})!`);
+      } else {
+        console.log(`✅ VERIFICATION PASSED: Rate matches expected value (₹${verifyRate.ratePerGram}/gram = ₹${expectedRatePerGram.toFixed(2)}/gram)`);
       }
     } else {
       console.error('❌ VERIFICATION FAILED: No rates found in MongoDB after update!');
