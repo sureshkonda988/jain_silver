@@ -467,6 +467,134 @@ router.post('/force-update', auth, async (req, res) => {
   }
 });
 
+// Dedicated endpoint for cron jobs to update rates (no auth required for cron)
+// This endpoint is designed to be called by Vercel Cron or external services
+router.post('/update', async (req, res) => {
+  const startTime = Date.now();
+  try {
+    console.log('🔄 Cron job triggered: Updating rates...');
+    
+    // Import rate fetcher
+    const { fetchSilverRatesFromMultipleSources } = require('../utils/multiSourceRateFetcher');
+    
+    // Fetch fresh rates with timeout
+    const liveRate = await Promise.race([
+      fetchSilverRatesFromMultipleSources(),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout after 8 seconds')), 8000)
+      )
+    ]);
+
+    if (!liveRate || !liveRate.ratePerGram || liveRate.ratePerGram <= 0) {
+      return res.status(500).json({ 
+        success: false,
+        message: 'Failed to fetch valid rate from endpoints',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Update MongoDB directly with fresh rate
+    const mongoose = require('mongoose');
+    
+    // Ensure MongoDB connection
+    if (mongoose.connection.readyState !== 1) {
+      const mongoURI = process.env.MONGODB_URI;
+      if (mongoURI) {
+        await mongoose.connect(mongoURI, {
+          useNewUrlParser: true,
+          useUnifiedTopology: true,
+          serverSelectionTimeoutMS: 5000,
+          maxPoolSize: 1
+        });
+      }
+    }
+
+    const baseRatePerGram = liveRate.ratePerGram;
+    const rateDefinitions = [
+      { name: 'Silver Coin 1 Gram', type: 'coin', weight: { value: 1, unit: 'grams' }, purity: '99.9%' },
+      { name: 'Silver Coin 5 Grams', type: 'coin', weight: { value: 5, unit: 'grams' }, purity: '99.9%' },
+      { name: 'Silver Coin 10 Grams', type: 'coin', weight: { value: 10, unit: 'grams' }, purity: '99.9%' },
+      { name: 'Silver Coin 50 Grams', type: 'coin', weight: { value: 50, unit: 'grams' }, purity: '99.9%' },
+      { name: 'Silver Coin 100 Grams', type: 'coin', weight: { value: 100, unit: 'grams' }, purity: '99.9%' },
+      { name: 'Silver Bar 100 Grams', type: 'bar', weight: { value: 100, unit: 'grams' }, purity: '99.99%' },
+      { name: 'Silver Bar 500 Grams', type: 'bar', weight: { value: 500, unit: 'grams' }, purity: '99.99%' },
+      { name: 'Silver Bar 1 Kg', type: 'bar', weight: { value: 1, unit: 'kg' }, purity: '99.99%' },
+      { name: 'Silver Jewelry 92.5%', type: 'jewelry', weight: { value: 1, unit: 'grams' }, purity: '92.5%' },
+      { name: 'Silver Jewelry 99.9%', type: 'jewelry', weight: { value: 1, unit: 'grams' }, purity: '99.9%' }
+    ];
+
+    let updatedCount = 0;
+    const updatePromises = rateDefinitions.map(async (rateDef) => {
+      try {
+        let ratePerGram = baseRatePerGram;
+        if (rateDef.purity === '92.5%') {
+          ratePerGram = baseRatePerGram * 0.96;
+        } else if (rateDef.purity === '99.99%') {
+          ratePerGram = baseRatePerGram * 1.005;
+        }
+
+        const manualAdjustment = manualAdjustments[rateDef.name]?.manualAdjustment || 0;
+        ratePerGram = ratePerGram + manualAdjustment;
+        ratePerGram = Math.max(0, Math.round(ratePerGram * 100) / 100);
+
+        let weightInGrams = rateDef.weight.value;
+        if (rateDef.weight.unit === 'kg') {
+          weightInGrams = rateDef.weight.value * 1000;
+        }
+
+        const totalRate = Math.round(ratePerGram * weightInGrams * 100) / 100;
+
+        await SilverRate.findOneAndUpdate(
+          { name: rateDef.name, location: 'Andhra Pradesh' },
+          {
+            name: rateDef.name,
+            type: rateDef.type,
+            weight: rateDef.weight,
+            purity: rateDef.purity,
+            ratePerGram: ratePerGram,
+            rate: totalRate,
+            lastUpdated: new Date(),
+            location: 'Andhra Pradesh',
+            unit: 'INR',
+            manualAdjustment: manualAdjustment,
+            source: liveRate.source || 'cron-update'
+          },
+          { upsert: true, new: true }
+        );
+        updatedCount++;
+      } catch (err) {
+        console.error(`❌ Failed to update ${rateDef.name}:`, err.message);
+      }
+    });
+    
+    await Promise.all(updatePromises);
+    
+    const duration = Date.now() - startTime;
+    console.log(`✅ Cron job completed: Updated ${updatedCount} rates in MongoDB (Base: ₹${baseRatePerGram.toFixed(2)}/gram, source: ${liveRate.source}, duration: ${duration}ms)`);
+    
+    res.json({ 
+      success: true,
+      message: `Successfully updated ${updatedCount} rates`,
+      baseRate: baseRatePerGram,
+      ratePerKg: liveRate.ratePerKg,
+      source: liveRate.source,
+      updatedCount: updatedCount,
+      duration: `${duration}ms`,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    console.error(`❌ Cron job failed (${duration}ms):`, error.message);
+    res.status(500).json({ 
+      success: false,
+      message: 'Rate update failed',
+      error: error.message,
+      duration: `${duration}ms`,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // Initialize rates - loads from MongoDB
 router.post('/initialize', async (req, res) => {
   try {
