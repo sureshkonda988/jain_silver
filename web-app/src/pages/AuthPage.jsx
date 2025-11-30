@@ -100,53 +100,42 @@ function AuthPage() {
         sx={{
           display: { xs: 'none', md: 'flex' },
           width: { md: '50%', lg: '55%' },
-          backgroundColor: colors.primary,
+          backgroundColor: '#ffffff',
           alignItems: 'center',
           justifyContent: 'center',
-          p: 4,
+          p: 6,
           position: 'relative',
-          overflow: 'hidden',
+          borderRight: '1px solid rgba(0,0,0,0.08)',
         }}
       >
         <Box
           sx={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primaryDark} 100%)`,
-            opacity: 0.95,
-          }}
-        />
-        <Box
-          sx={{
-            position: 'relative',
-            zIndex: 1,
             textAlign: 'center',
             maxWidth: 600,
+            width: '100%',
           }}
         >
           <Box
             component="img"
-            src="/Gemini_Generated_Image_8ia19c8ia19c8ia1.png"
+            src="/1764232687647-removebg-preview.png"
             alt="Jain Silver Plaza"
             sx={{
               width: '100%',
-              maxWidth: 500,
+              maxWidth: 450,
               height: 'auto',
-              mb: 4,
+              mb: 5,
               objectFit: 'contain',
-              filter: 'drop-shadow(0 10px 30px rgba(0,0,0,0.2))',
+              mx: 'auto',
+              display: 'block',
             }}
           />
           <Typography
             variant="h3"
             sx={{
               fontWeight: 700,
-              color: 'white',
+              color: colors.textPrimary,
               mb: 2,
-              textShadow: '0 2px 10px rgba(0,0,0,0.2)',
+              fontSize: { md: '2rem', lg: '2.5rem' },
             }}
           >
             Welcome Back
@@ -154,9 +143,10 @@ function AuthPage() {
           <Typography
             variant="h6"
             sx={{
-              color: 'rgba(255,255,255,0.9)',
+              color: colors.textSecondary,
               fontWeight: 400,
-              lineHeight: 1.6,
+              lineHeight: 1.8,
+              fontSize: { md: '1rem', lg: '1.1rem' },
             }}
           >
             Your trusted partner for premium silver products
@@ -195,10 +185,10 @@ function AuthPage() {
             >
               <Box
                 component="img"
-                src="/Gemini_Generated_Image_8ia19c8ia19c8ia1.png"
+                src="/1764232687647-removebg-preview.png"
                 alt="Jain Silver Plaza"
                 sx={{
-                  width: 200,
+                  width: 250,
                   height: 'auto',
                   maxWidth: '100%',
                   mb: 2,
