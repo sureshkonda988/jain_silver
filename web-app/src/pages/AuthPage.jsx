@@ -113,16 +113,13 @@ function AuthPage() {
               src="/Gemini_Generated_Image_8ia19c8ia19c8ia1.png"
               alt="Jain Silver Plaza"
               sx={{
-                width: { xs: 200, sm: 250 },
+                width: { xs: 280, sm: 350 },
                 height: 'auto',
                 maxWidth: '100%',
                 mb: 3,
                 objectFit: 'contain',
               }}
             />
-            <Typography variant="h4" sx={{ fontWeight: 700, color: colors.primary, mb: 1 }}>
-              Jain Silver Plaza
-            </Typography>
             <Typography variant="h6" sx={{ fontWeight: 600, color: colors.textSecondary, mb: 0.5 }}>
               Sign In
             </Typography>
