@@ -883,11 +883,25 @@ const updateRatesHandler = async (req, res = null) => {
     console.log(`   Duration: ${duration}ms`);
     console.log(`   Timestamp: ${new Date().toISOString()}`);
     
-    // ALWAYS verify one rate was actually updated
-    const verifyRate = await SilverRate.findOne({ location: 'Andhra Pradesh' }).sort({ lastUpdated: -1 });
-    if (verifyRate) {
+    // ALWAYS verify rates were actually updated in MongoDB
+    console.log(`🔍 Verifying MongoDB updates...`);
+    const allRatesAfterUpdate = await SilverRate.find({ location: 'Andhra Pradesh' }).sort({ lastUpdated: -1 });
+    
+    if (allRatesAfterUpdate && allRatesAfterUpdate.length > 0) {
+      const verifyRate = allRatesAfterUpdate[0];
       const verifyAge = Date.now() - new Date(verifyRate.lastUpdated).getTime();
-      console.log(`✅ VERIFICATION: Latest rate "${verifyRate.name}" = ₹${verifyRate.ratePerGram}/gram (updated ${Math.round(verifyAge/1000)}s ago)`);
+      console.log(`✅ VERIFICATION: Found ${allRatesAfterUpdate.length} rates in MongoDB`);
+      console.log(`✅ Latest rate "${verifyRate.name}" = ₹${verifyRate.ratePerGram}/gram (updated ${Math.round(verifyAge/1000)}s ago)`);
+      
+      // Check if any rates are still old (not updated)
+      const oldRates = allRatesAfterUpdate.filter(rate => {
+        const age = Date.now() - new Date(rate.lastUpdated).getTime();
+        return age > 5000; // Older than 5 seconds
+      });
+      
+      if (oldRates.length > 0) {
+        console.warn(`⚠️ WARNING: ${oldRates.length} rates are still old (>5s): ${oldRates.map(r => r.name).join(', ')}`);
+      }
       
       // Calculate expected rate for this specific rate type (accounting for purity adjustments)
       let expectedRatePerGram = baseRatePerGram;
@@ -907,8 +921,14 @@ const updateRatesHandler = async (req, res = null) => {
       } else {
         console.log(`✅ VERIFICATION PASSED: Rate matches expected value (₹${verifyRate.ratePerGram}/gram = ₹${expectedRatePerGram.toFixed(2)}/gram)`);
       }
+      
+      // Verify all 10 rates exist and are recent
+      if (allRatesAfterUpdate.length < 10) {
+        console.warn(`⚠️ WARNING: Only ${allRatesAfterUpdate.length}/10 rates found in MongoDB!`);
+      }
     } else {
       console.error('❌ VERIFICATION FAILED: No rates found in MongoDB after update!');
+      console.error('   This indicates MongoDB write failed or connection issue');
     }
     
     // Only send response if res object is provided (not for background calls)
