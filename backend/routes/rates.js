@@ -565,10 +565,13 @@ const updateRatesHandler = async (req, res = null) => {
       return; // If no response object, just return silently
     }
 
-    // Log the fetched rate details (only occasionally to avoid spam)
-    if (Math.random() < 0.1) {
-      console.log(`📊 Fetched live rate: ₹${liveRate.ratePerGram.toFixed(2)}/gram (₹${liveRate.ratePerKg}/kg)`);
-      console.log(`📊 Source: ${liveRate.source}, Raw Ask: ${liveRate.rawData?.ask || 'N/A'}, Raw High: ${liveRate.rawData?.high || 'N/A'}`);
+    // ALWAYS log the fetched rate details (critical for debugging)
+    console.log(`📊 Fetched LIVE rate: ₹${liveRate.ratePerGram.toFixed(2)}/gram (₹${liveRate.ratePerKg}/kg)`);
+    console.log(`📊 Source: ${liveRate.source}, Raw Ask: ${liveRate.rawData?.ask || 'N/A'}, Raw High: ${liveRate.rawData?.high || 'N/A'}`);
+    
+    // Warn if rate seems too low (might be old/cached)
+    if (liveRate.ratePerGram < 170) {
+      console.warn(`⚠️ WARNING: Fetched rate (₹${liveRate.ratePerGram.toFixed(2)}/gram) seems low. Expected ~₹176-177/gram. Check source!`);
     }
 
     // Update MongoDB directly with fresh rate
@@ -610,10 +613,8 @@ const updateRatesHandler = async (req, res = null) => {
     const baseRatePerGram = liveRate.ratePerGram;
     const baseRatePerKg = liveRate.ratePerKg; // Use exact value from source
     
-    // Only log occasionally to avoid spam
-    if (Math.random() < 0.1) {
-      console.log(`💾 Updating MongoDB with base rate: ₹${baseRatePerGram.toFixed(2)}/gram (₹${baseRatePerKg}/kg)`);
-    }
+    // ALWAYS log MongoDB update (critical for debugging)
+    console.log(`💾 Updating MongoDB with LIVE base rate: ₹${baseRatePerGram.toFixed(2)}/gram (₹${baseRatePerKg}/kg)`);
     const rateDefinitions = [
       { name: 'Silver Coin 1 Gram', type: 'coin', weight: { value: 1, unit: 'grams' }, purity: '99.9%' },
       { name: 'Silver Coin 5 Grams', type: 'coin', weight: { value: 5, unit: 'grams' }, purity: '99.9%' },
@@ -676,28 +677,26 @@ const updateRatesHandler = async (req, res = null) => {
       const bulkResult = await SilverRate.bulkWrite(bulkOps, { ordered: false });
       updatedCount = bulkResult.modifiedCount + bulkResult.upsertedCount;
       
-      // Only log occasionally to avoid spam (every 10th update)
-      if (Math.random() < 0.1) {
-        console.log(`✅ Bulk update: ${updatedCount} rates updated (${bulkResult.modifiedCount} modified, ${bulkResult.upsertedCount} upserted)`);
-        
-        // Log first rate for verification
-        if (rateDefinitions.length > 0) {
-          const firstRate = rateDefinitions[0];
-          let firstRatePerGram = baseRatePerGram;
-          if (firstRate.purity === '92.5%') {
-            firstRatePerGram = baseRatePerGram * 0.96;
-          } else if (firstRate.purity === '99.99%') {
-            firstRatePerGram = baseRatePerGram * 1.005;
-          }
-          const manualAdj = manualAdjustments[firstRate.name]?.manualAdjustment || 0;
-          firstRatePerGram = firstRatePerGram + manualAdj;
-          let weightInGrams = firstRate.weight.value;
-          if (firstRate.weight.unit === 'kg') {
-            weightInGrams = firstRate.weight.value * 1000;
-          }
-          const totalRate = Math.round(firstRatePerGram * weightInGrams * 100) / 100;
-          console.log(`✅ Sample update: ${firstRate.name} = ₹${firstRatePerGram.toFixed(2)}/gram (₹${totalRate}/total)`);
+      // ALWAYS log bulk update result (critical for debugging)
+      console.log(`✅ MongoDB bulk update: ${updatedCount} rates updated (${bulkResult.modifiedCount} modified, ${bulkResult.upsertedCount} upserted)`);
+      
+      // Log first rate for verification
+      if (rateDefinitions.length > 0) {
+        const firstRate = rateDefinitions[0];
+        let firstRatePerGram = baseRatePerGram;
+        if (firstRate.purity === '92.5%') {
+          firstRatePerGram = baseRatePerGram * 0.96;
+        } else if (firstRate.purity === '99.99%') {
+          firstRatePerGram = baseRatePerGram * 1.005;
         }
+        const manualAdj = manualAdjustments[firstRate.name]?.manualAdjustment || 0;
+        firstRatePerGram = firstRatePerGram + manualAdj;
+        let weightInGrams = firstRate.weight.value;
+        if (firstRate.weight.unit === 'kg') {
+          weightInGrams = firstRate.weight.value * 1000;
+        }
+        const totalRate = Math.round(firstRatePerGram * weightInGrams * 100) / 100;
+        console.log(`✅ Sample update: ${firstRate.name} = ₹${firstRatePerGram.toFixed(2)}/gram (₹${totalRate}/total) from base ₹${baseRatePerGram.toFixed(2)}/gram`);
       }
     } catch (bulkErr) {
       console.error('❌ Bulk update failed, falling back to individual updates:', bulkErr.message);
@@ -751,20 +750,25 @@ const updateRatesHandler = async (req, res = null) => {
     
     const duration = Date.now() - startTime;
     
-    // Only log occasionally to avoid spam (every 10th update)
-    if (Math.random() < 0.1) {
-      console.log(`✅ Rate update completed: Updated ${updatedCount} rates in MongoDB`);
-      console.log(`   Base Rate: ₹${baseRatePerGram.toFixed(2)}/gram (₹${baseRatePerKg}/kg)`);
-      console.log(`   Source: ${liveRate.source}`);
-      console.log(`   Duration: ${duration}ms`);
-      console.log(`   Timestamp: ${new Date().toISOString()}`);
+    // ALWAYS log completion (critical for debugging)
+    console.log(`✅ Rate update COMPLETED: Updated ${updatedCount} rates in MongoDB`);
+    console.log(`   Base Rate: ₹${baseRatePerGram.toFixed(2)}/gram (₹${baseRatePerKg}/kg)`);
+    console.log(`   Source: ${liveRate.source}`);
+    console.log(`   Duration: ${duration}ms`);
+    console.log(`   Timestamp: ${new Date().toISOString()}`);
+    
+    // ALWAYS verify one rate was actually updated
+    const verifyRate = await SilverRate.findOne({ location: 'Andhra Pradesh' }).sort({ lastUpdated: -1 });
+    if (verifyRate) {
+      const verifyAge = Date.now() - new Date(verifyRate.lastUpdated).getTime();
+      console.log(`✅ VERIFICATION: Latest rate "${verifyRate.name}" = ₹${verifyRate.ratePerGram}/gram (updated ${Math.round(verifyAge/1000)}s ago)`);
       
-      // Verify one rate was actually updated
-      const verifyRate = await SilverRate.findOne({ location: 'Andhra Pradesh' }).sort({ lastUpdated: -1 });
-      if (verifyRate) {
-        const verifyAge = Date.now() - new Date(verifyRate.lastUpdated).getTime();
-        console.log(`✅ Verification: Latest rate "${verifyRate.name}" = ₹${verifyRate.ratePerGram}/gram (updated ${Math.round(verifyAge/1000)}s ago)`);
+      // Warn if verified rate doesn't match what we just updated
+      if (Math.abs(verifyRate.ratePerGram - baseRatePerGram) > 1) {
+        console.warn(`⚠️ WARNING: Verified rate (₹${verifyRate.ratePerGram}/gram) doesn't match base rate (₹${baseRatePerGram.toFixed(2)}/gram)!`);
       }
+    } else {
+      console.error('❌ VERIFICATION FAILED: No rates found in MongoDB after update!');
     }
     
     // Only send response if res object is provided (not for background calls)
