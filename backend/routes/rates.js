@@ -334,11 +334,14 @@ router.get('/', async (req, res) => {
             }
             // Trigger update in background (non-blocking) - this will fetch from RB Goldspot and update MongoDB
             updateRatesHandler(req, null).catch(err => {
-              // Only log errors occasionally to avoid spam
-              if (Math.random() < 0.1) {
-                console.error('❌ Background update failed:', err.message);
-              }
+              // Always log update failures to debug rate switching issue
+              console.error('❌ Background update failed:', err.message);
             });
+          }
+          
+          // Warn if serving old rates (might indicate update failures)
+          if (mongoAge > 5000) {
+            console.warn(`⚠️ Serving rates that are ${Math.round(mongoAge/1000)}s old - updates may be failing!`);
           }
           
           // Only log occasionally to avoid spam (every 10th request)
