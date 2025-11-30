@@ -13,11 +13,54 @@ const MAX_CONSECUTIVE_FAILURES = 5;
 const updateRates = async (io) => {
   const startTime = Date.now();
   try {
-    const rates = await SilverRate.find({ location: 'Andhra Pradesh' });
+    let rates = await SilverRate.find({ location: 'Andhra Pradesh' });
     
     if (rates.length === 0) {
-      // Silently return if no rates exist yet (they will be initialized on server start)
-      return;
+      // Initialize rates if they don't exist
+      console.log('⚠️ No rates found in MongoDB, initializing rates...');
+      const rateDefinitions = [
+        { name: 'Silver Coin 1 Gram', type: 'coin', weight: { value: 1, unit: 'grams' }, purity: '99.9%' },
+        { name: 'Silver Coin 5 Grams', type: 'coin', weight: { value: 5, unit: 'grams' }, purity: '99.9%' },
+        { name: 'Silver Coin 10 Grams', type: 'coin', weight: { value: 10, unit: 'grams' }, purity: '99.9%' },
+        { name: 'Silver Coin 50 Grams', type: 'coin', weight: { value: 50, unit: 'grams' }, purity: '99.9%' },
+        { name: 'Silver Coin 100 Grams', type: 'coin', weight: { value: 100, unit: 'grams' }, purity: '99.9%' },
+        { name: 'Silver Bar 100 Grams', type: 'bar', weight: { value: 100, unit: 'grams' }, purity: '99.99%' },
+        { name: 'Silver Bar 500 Grams', type: 'bar', weight: { value: 500, unit: 'grams' }, purity: '99.99%' },
+        { name: 'Silver Bar 1 Kg', type: 'bar', weight: { value: 1, unit: 'kg' }, purity: '99.99%' },
+        { name: 'Silver Jewelry 92.5%', type: 'jewelry', weight: { value: 1, unit: 'grams' }, purity: '92.5%' },
+        { name: 'Silver Jewelry 99.9%', type: 'jewelry', weight: { value: 1, unit: 'grams' }, purity: '99.9%' }
+      ];
+      
+      // Create initial rates with default values (will be updated immediately after)
+      const initPromises = rateDefinitions.map(async (rateDef) => {
+        try {
+          const newRate = new SilverRate({
+            name: rateDef.name,
+            type: rateDef.type,
+            weight: rateDef.weight,
+            purity: rateDef.purity,
+            ratePerGram: 170.0, // Default, will be updated immediately
+            rate: 170.0 * (rateDef.weight.unit === 'kg' ? rateDef.weight.value * 1000 : rateDef.weight.value),
+            location: 'Andhra Pradesh',
+            unit: 'INR',
+            lastUpdated: new Date()
+          });
+          await newRate.save();
+        } catch (err) {
+          console.error(`❌ Failed to initialize ${rateDef.name}:`, err.message);
+        }
+      });
+      
+      await Promise.all(initPromises);
+      console.log('✅ Initialized rates in MongoDB');
+      
+      // Fetch the newly created rates
+      rates = await SilverRate.find({ location: 'Andhra Pradesh' });
+      
+      if (rates.length === 0) {
+        console.warn('⚠️ Still no rates after initialization, skipping update');
+        return;
+      }
     }
     
     // Fetch fresh rate every second from multiple sources (RB Goldspot + Vercel) - NO FALLBACK
@@ -85,7 +128,18 @@ const updateRates = async (io) => {
         
         rate.rate = Math.round(rate.ratePerGram * weightInGrams * 100) / 100;
         rate.lastUpdated = new Date();
-        await rate.save();
+        
+        // Save to MongoDB with error handling
+        try {
+          await rate.save();
+          // Log successful save (only for first rate to avoid spam)
+          if (rate.name === rates[0]?.name) {
+            console.log(`💾 Saved to MongoDB: ${rate.name} = ₹${rate.ratePerGram}/gram`);
+          }
+        } catch (saveError) {
+          console.error(`❌ Failed to save ${rate.name} to MongoDB:`, saveError.message);
+          // Continue with other rates even if one fails
+        }
 
         // Emit update via Socket.io
         if (io) {
@@ -117,7 +171,18 @@ const updateRates = async (io) => {
 
     // Log every update to verify it's working
     const totalTime = Date.now() - startTime;
-    console.log(`✅ Updated ${rates.length} rates (Base: ₹${baseRatePerGram.toFixed(2)}/gram from ${liveRate.source}, total time: ${totalTime}ms)`);
+    console.log(`✅ Updated ${rates.length} rates in MongoDB (Base: ₹${baseRatePerGram.toFixed(2)}/gram from ${liveRate.source}, total time: ${totalTime}ms)`);
+    
+    // Verify MongoDB was updated by checking one rate
+    try {
+      const verifyRate = await SilverRate.findOne({ location: 'Andhra Pradesh' }).sort({ lastUpdated: -1 });
+      if (verifyRate) {
+        const verifyAge = Date.now() - new Date(verifyRate.lastUpdated).getTime();
+        console.log(`✅ MongoDB verified: Latest rate "${verifyRate.name}" updated ${Math.round(verifyAge/1000)}s ago (₹${verifyRate.ratePerGram}/gram)`);
+      }
+    } catch (verifyError) {
+      console.warn('⚠️ Could not verify MongoDB update:', verifyError.message);
+    }
   } catch (error) {
     consecutiveFailures++;
     const errorTime = Date.now() - startTime;

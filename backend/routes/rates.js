@@ -248,7 +248,7 @@ router.get('/', async (req, res) => {
     // Trigger background update (non-blocking)
     updateRatesFromEndpoints().catch(() => {});
     
-    // Try to get rates from MongoDB first (stable source)
+    // ALWAYS try to get rates from MongoDB first (primary source)
     try {
       const mongoose = require('mongoose');
       if (mongoose.connection.readyState === 1) {
@@ -257,24 +257,39 @@ router.get('/', async (req, res) => {
           .lean();
         
         if (mongoRates && mongoRates.length > 0) {
-          // Check if MongoDB rates are fresh (within last 30 seconds)
+          // Always use MongoDB rates if available (they're updated every second)
           const latestRate = mongoRates.reduce((latest, rate) => {
             return rate.lastUpdated > latest.lastUpdated ? rate : latest;
           }, mongoRates[0]);
           
           const mongoAge = Date.now() - new Date(latestRate.lastUpdated).getTime();
           
-          if (mongoAge < 30000) {
-            // MongoDB rates are fresh, use them
-            console.log(`📦 Serving ${mongoRates.length} rates from MongoDB (${Math.round(mongoAge/1000)}s old)`);
-            return res.json(mongoRates);
-          } else {
-            console.log(`⚠️ MongoDB rates stale (${Math.round(mongoAge/1000)}s old), using cache`);
-          }
+          // Log the age for debugging, but always serve from MongoDB
+          console.log(`📦 Serving ${mongoRates.length} rates from MongoDB (${Math.round(mongoAge/1000)}s old, latest: ${latestRate.name} = ₹${latestRate.ratePerGram}/gram)`);
+          
+          // Add USD rate to all rates if available
+          const ratesWithUSD = mongoRates.map(rate => ({
+            ...rate,
+            usdInrRate: cachedBaseRate.usdInrRate || 89.25
+          }));
+          
+          // Set headers to prevent caching
+          res.set({
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+          });
+          
+          return res.json(ratesWithUSD);
+        } else {
+          console.warn('⚠️ No rates found in MongoDB, falling back to cache');
         }
+      } else {
+        console.warn('⚠️ MongoDB not connected, falling back to cache');
       }
     } catch (mongoErr) {
-      console.warn('⚠️ MongoDB read failed:', mongoErr.message);
+      console.error('❌ MongoDB read failed:', mongoErr.message);
+      console.warn('⚠️ Falling back to cache');
     }
     
     // Fallback: Calculate rates from cache
@@ -332,6 +347,14 @@ router.get('/', async (req, res) => {
     });
     
     console.log(`📦 Serving ${allRates.length} rates from cache (base: ₹${baseRatePerGram.toFixed(2)}/gram)`);
+    
+    // Set headers to prevent caching
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+    
     return res.json(allRates);
     
   } catch (error) {
