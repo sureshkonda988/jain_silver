@@ -798,16 +798,42 @@ router.post('/signin',
         });
         
         if (user.status === 'rejected') {
+          // Get store phone number for contact info
+          let adminPhone = '+91 98480 34323'; // Default phone number
+          try {
+            const StoreInfo = require('../models/Store');
+            const storeInfo = await StoreInfo.findOne();
+            if (storeInfo && storeInfo.phoneNumber) {
+              adminPhone = storeInfo.phoneNumber;
+            }
+          } catch (storeError) {
+            console.warn('Could not fetch store info for admin contact:', storeError.message);
+          }
+          
           return res.status(403).json({ 
-            message: 'Your account has been rejected. Please contact admin for assistance.',
+            message: `Your account has been rejected. Please contact admin for assistance.\n\nAdmin Contact: ${adminPhone}`,
             status: user.status,
-            userStatus: 'rejected'
+            userStatus: 'rejected',
+            adminPhone: adminPhone
           });
         } else if (user.status === 'pending') {
+          // Get store phone number for contact info
+          let adminPhone = '+91 98480 34323'; // Default phone number
+          try {
+            const StoreInfo = require('../models/Store');
+            const storeInfo = await StoreInfo.findOne();
+            if (storeInfo && storeInfo.phoneNumber) {
+              adminPhone = storeInfo.phoneNumber;
+            }
+          } catch (storeError) {
+            console.warn('Could not fetch store info for admin contact:', storeError.message);
+          }
+          
           return res.status(403).json({ 
-            message: 'Your account is pending admin approval. Please wait for approval before signing in.',
+            message: `Your account is pending admin approval. Please wait for approval before signing in.\n\nAdmin Contact: ${adminPhone}`,
             status: user.status,
-            userStatus: 'pending'
+            userStatus: 'pending',
+            adminPhone: adminPhone
           });
         } else {
           return res.status(403).json({ 

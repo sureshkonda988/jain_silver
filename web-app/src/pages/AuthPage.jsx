@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -11,6 +11,7 @@ import {
   Avatar,
   ToggleButton,
   ToggleButtonGroup,
+  Link,
 } from '@mui/material';
 import { Email, Phone, Lock } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthContext';
@@ -26,6 +27,7 @@ function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [usePhone, setUsePhone] = useState(false);
+  const [adminPhone, setAdminPhone] = useState(null);
 
   const handleSignIn = async () => {
     if ((!email && !phone) || !password) {
@@ -66,13 +68,17 @@ function AuthPage() {
       
       // Show status information if available
       const userStatus = err.response?.data?.userStatus || err.response?.data?.status;
+      const responseAdminPhone = err.response?.data?.adminPhone || adminPhone;
+      
       if (userStatus) {
-        const statusMessages = {
-          'pending': 'Your account status: PENDING - Waiting for admin approval',
-          'rejected': 'Your account status: REJECTED - Please contact admin',
-          'approved': 'Your account is approved'
-        };
-        setError(`${errorMessage}\n\n${statusMessages[userStatus] || `Status: ${userStatus.toUpperCase()}`}`);
+        let statusMessage = errorMessage;
+        
+        // Add admin contact for rejected/pending users
+        if ((userStatus === 'rejected' || userStatus === 'pending') && responseAdminPhone) {
+          statusMessage = `${errorMessage}\n\nAdmin Contact: ${responseAdminPhone}`;
+        }
+        
+        setError(statusMessage);
       } else {
         setError(errorMessage);
       }
@@ -116,7 +122,23 @@ function AuthPage() {
           </Box>
 
           {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
+            <Alert 
+              severity="error" 
+              sx={{ mb: 2, whiteSpace: 'pre-line' }}
+              action={
+                (error.includes('rejected') || error.includes('pending')) && adminPhone ? (
+                  <Button
+                    size="small"
+                    color="inherit"
+                    startIcon={<Phone />}
+                    onClick={() => handlePhoneCall(adminPhone)}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    Call Admin
+                  </Button>
+                ) : null
+              }
+            >
               {error}
             </Alert>
           )}
