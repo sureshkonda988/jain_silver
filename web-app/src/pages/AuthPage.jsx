@@ -107,16 +107,26 @@ function AuthPage() {
         }}
       >
         <CardContent sx={{ p: 4 }}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
-            <Avatar
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 4 }}>
+            <Box
+              component="img"
               src="/jain_logo.png"
               alt="Jain Silver Plaza"
-              sx={{ width: 120, height: 120, mb: 2 }}
+              sx={{
+                width: { xs: 200, sm: 250 },
+                height: 'auto',
+                maxWidth: '100%',
+                mb: 3,
+                objectFit: 'contain',
+              }}
             />
-            <Typography variant="h5" sx={{ fontWeight: 700, color: colors.primary }}>
+            <Typography variant="h4" sx={{ fontWeight: 700, color: colors.primary, mb: 1 }}>
+              Jain Silver Plaza
+            </Typography>
+            <Typography variant="h6" sx={{ fontWeight: 600, color: colors.textSecondary, mb: 0.5 }}>
               Sign In
             </Typography>
-            <Typography variant="body2" sx={{ color: colors.textSecondary, mt: 1 }}>
+            <Typography variant="body2" sx={{ color: colors.textSecondary }}>
               Sign in to continue
             </Typography>
           </Box>
