@@ -1,10 +1,10 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'https://jain-silver.vercel.app/api';
+const API_BASE_URL = 'https://jain-silver-phi.vercel.app/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 5000, // 5 seconds - backend now uses cache for fast response
+  timeout: 10000, // 10 seconds - backend may wait for fresh rates
   maxContentLength: 50 * 1024 * 1024,
   maxBodyLength: 50 * 1024 * 1024,
   headers: {
@@ -17,7 +17,7 @@ api.interceptors.request.use(
     // Don't override timeout if explicitly set in the request
     if (!config.timeout) {
       if (config.url && (config.url.includes('/rates') || config.url === '/rates')) {
-        config.timeout = 5000; // 5 seconds - backend cache returns instantly
+        config.timeout = 10000; // 10 seconds - backend may wait for fresh rates
       }
     }
     

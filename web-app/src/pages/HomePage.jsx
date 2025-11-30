@@ -72,7 +72,7 @@ function HomePage() {
 
       // Add cache-busting timestamp to ensure fresh data every second
       const response = await api.get('/rates', { 
-        timeout: 5000, // Reduced to 5 seconds for faster updates
+        timeout: 10000, // 10 seconds - backend may wait for fresh rates
         params: { _t: Date.now() }, // Cache busting - ensures fresh data (timestamp in URL)
         cancelToken: source.token
       });
@@ -179,13 +179,28 @@ function HomePage() {
 
   const fetchRates = async () => {
     try {
-      const response = await api.get('/rates', { timeout: 5000 }); // 5 seconds - backend cache returns instantly
-      if (response.data && Array.isArray(response.data)) {
+      const response = await api.get('/rates', { 
+        timeout: 10000, // 10 seconds - backend may wait for fresh rates
+        params: { _t: Date.now() } // Cache busting
+      });
+      if (response.data && Array.isArray(response.data) && response.data.length > 0) {
         setRates(response.data);
         setLastUpdateTime(new Date());
+        console.log(`✅ Loaded ${response.data.length} silver rates`);
+      } else {
+        console.warn('⚠️ Unexpected response format:', response.data);
       }
     } catch (error) {
-      console.error('Error fetching rates:', error.message || error);
+      const errorMsg = error.response?.data?.message || error.message || 'Network Error';
+      const statusCode = error.response?.status;
+      
+      console.error('❌ Error fetching rates:', {
+        message: errorMsg,
+        status: statusCode,
+        code: error.code,
+        url: error.config?.url
+      });
+      
       // Don't show error to user, just keep loading state
       // Rates will be fetched by polling
     } finally {

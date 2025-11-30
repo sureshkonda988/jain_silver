@@ -20,10 +20,19 @@ function ProfilePage() {
 
   const fetchProfile = async () => {
     try {
-      const response = await api.get('/users/profile');
-      setProfile(response.data);
+      const response = await api.get('/users/profile', {
+        timeout: 10000
+      });
+      if (response.data) {
+        setProfile(response.data);
+      }
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      const errorMsg = error.response?.data?.message || error.message || 'Network Error';
+      console.error('Error fetching profile:', {
+        message: errorMsg,
+        status: error.response?.status,
+        code: error.code
+      });
     } finally {
       setLoading(false);
     }
@@ -31,10 +40,21 @@ function ProfilePage() {
 
   const fetchStoreInfo = async () => {
     try {
-      const response = await api.get('/store/info');
-      setStoreInfo(response.data);
+      const response = await api.get('/store/info', {
+        timeout: 10000,
+        params: { _t: Date.now() } // Cache busting
+      });
+      if (response.data) {
+        setStoreInfo(response.data);
+      }
     } catch (error) {
-      console.error('Error fetching store info:', error);
+      const errorMsg = error.response?.data?.message || error.message || 'Network Error';
+      console.error('Error fetching store info:', {
+        message: errorMsg,
+        status: error.response?.status,
+        code: error.code
+      });
+      // Don't show error to user - use default data
     }
   };
 
