@@ -371,18 +371,40 @@ router.get('/', async (req, res) => {
             }
           }
           
-          // If rates are stale (older than 1 second), trigger update in background
+          // If rates are stale (older than 1 second), wait for update to complete
           // Since mobile app polls every second, this ensures rates update every second
           if (mongoAge > STALE_THRESHOLD) {
-            // Only log occasionally to avoid spam (every 10th update)
-            if (Math.random() < 0.1) {
-              console.log(`🔄 Rates are stale (${Math.round(mongoAge/1000)}s old), triggering live update...`);
+            console.log(`🔄 Rates are stale (${Math.round(mongoAge/1000)}s old), fetching fresh rates...`);
+            try {
+              // Wait for update to complete (blocking) to ensure fresh rates
+              await updateRatesHandler(req, null);
+              // Fetch fresh rates after update
+              const freshRates = await SilverRate.find({ location: 'Andhra Pradesh' })
+                .sort({ name: 1 })
+                .lean();
+              if (freshRates && freshRates.length > 0) {
+                const freshLatest = freshRates.reduce((latest, rate) => {
+                  return rate.lastUpdated > latest.lastUpdated ? rate : latest;
+                }, freshRates[0]);
+                const freshAge = Date.now() - new Date(freshLatest.lastUpdated).getTime();
+                console.log(`✅ Fresh rates fetched: ${freshRates.length} rates (${Math.round(freshAge/1000)}s old, latest: ${freshLatest.name} = ₹${freshLatest.ratePerGram}/gram)`);
+                
+                const ratesWithUSD = freshRates.map(rate => ({
+                  ...rate,
+                  usdInrRate: cachedBaseRate.usdInrRate || 89.25
+                }));
+                res.set({
+                  'Cache-Control': 'no-cache, no-store, must-revalidate',
+                  'Pragma': 'no-cache',
+                  'Expires': '0'
+                });
+                return res.json(ratesWithUSD);
+              }
+            } catch (updateErr) {
+              console.error('❌ Update failed for stale rates:', updateErr.message);
+              // If update fails, still serve current rates (better than error)
+              // But log the failure
             }
-            // Trigger update in background (non-blocking) - this will fetch from RB Goldspot and update MongoDB
-            updateRatesHandler(req, null).catch(err => {
-              // Always log update failures to debug rate switching issue
-              console.error('❌ Background update failed:', err.message);
-            });
           }
           
           // Warn if serving old rates (might indicate update failures)
