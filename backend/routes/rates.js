@@ -778,15 +778,26 @@ const updateRatesHandler = async (req, res = null) => {
     
     // Execute bulk write (much faster than individual updates)
     try {
-      const bulkResult = await SilverRate.bulkWrite(bulkOps, { ordered: false });
+      console.log(`🔄 Executing bulk write for ${bulkOps.length} rates...`);
+      const bulkResult = await SilverRate.bulkWrite(bulkOps, { 
+        ordered: false,
+        writeConcern: { w: 1 } // Ensure write is acknowledged
+      });
       updatedCount = bulkResult.modifiedCount + bulkResult.upsertedCount;
       
       // ALWAYS log bulk update result (critical for debugging)
       console.log(`✅ MongoDB bulk update: ${updatedCount} rates updated (${bulkResult.modifiedCount} modified, ${bulkResult.upsertedCount} upserted) from base ₹${baseRatePerGram.toFixed(2)}/gram`);
+      console.log(`📊 Bulk write details: matched=${bulkResult.matchedCount}, modified=${bulkResult.modifiedCount}, upserted=${bulkResult.upsertedCount}`);
       
       // Warn if not all rates were updated
       if (updatedCount < rateDefinitions.length) {
         console.warn(`⚠️ WARNING: Only ${updatedCount}/${rateDefinitions.length} rates were updated! Some rates may be stale.`);
+      }
+      
+      // Verify write actually happened
+      if (bulkResult.modifiedCount === 0 && bulkResult.upsertedCount === 0) {
+        console.error('❌ CRITICAL: Bulk write returned 0 updates! MongoDB may not be saving changes.');
+        console.error('   This could indicate: connection issue, write permission issue, or filter mismatch');
       }
       
       // Log first rate for verification
