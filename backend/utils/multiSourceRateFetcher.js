@@ -9,7 +9,7 @@ const { RATE_SOURCES, ACTIVE_RATE_SOURCE } = require('../config/rateSource');
 
 // Fetch from RB Goldspot (tab-separated format)
 // Format: ID	Name	Bid	Ask	High	Low	Status
-// Live data example: 2966	Silver 999 	-	168995	170887	168885	InStock
+// Live data example: 2966	Silver 999 	-	176845	176845	176845	InStock
 // Ask price is the selling price in INR per KG
 const fetchFromRBGoldspot = async () => {
   try {
@@ -34,55 +34,67 @@ const fetchFromRBGoldspot = async () => {
 
     console.log('✅ RB Goldspot response received (status:', response.status, ')');
 
-    // Parse tab-separated format
+    // Parse tab-separated format - Extract ALL rates
     // Format from API: ID	Name	Bid	Ask	High	Low	Status
-    // Example: 2966	Silver 999 	-	169399	170256	167100	InStock
-    const lines = response.data.split('\n');
+    // Example: 2966	Silver 999 	-	176845	176845	176845	InStock
+    const lines = response.data.split('\n').filter(line => line.trim());
+    const allRates = {};
     let ratePerKg = null;
     let ratePerGram = null;
     let silver999Data = null;
+    let usdInrRate = null;
+    let gold999Rate = null;
+    let silverMini999Rate = null;
 
+    // Parse ALL lines to extract all available rates
     for (const line of lines) {
       const trimmedLine = line.trim();
       if (!trimmedLine) continue;
 
-      // Split by tabs (exact format: ID	Name	Bid	Ask	High	Low	Status)
-      // Example: 2966	Silver 999 	-	168889	170256	167100	InStock
-      const parts = trimmedLine.split(/\t/);
+      // Split by tabs (primary) or multiple spaces (fallback)
+      // Format: ID	Name	Bid	Ask	High	Low	Status
+      let parts = trimmedLine.split(/\t/);
+      
+      // If no tabs found, try splitting by multiple spaces
+      if (parts.length < 6) {
+        parts = trimmedLine.split(/\s{2,}/);
+      }
+      
+      // Filter out empty parts
+      parts = parts.map(p => p.trim()).filter(p => p.length > 0);
       
       if (parts.length >= 6) {
-        const id = parts[0].trim();
-        const name = parts[1].trim();
-        const bid = parts[2].trim();
-        const ask = parts[3].trim();
-        const high = parts[4].trim();
-        const low = parts[5].trim();
+        const id = parts[0];
+        const name = parts[1];
+        const bid = parts[2] || '-';
+        const ask = parts[3] || '-';
+        const high = parts[4] || '-';
+        const low = parts[5] || '-';
+        const status = parts[6] || '';
 
-        // Look for Silver 999 (ID: 2966) - exact match
-        // Exclude "Silver Mini 999" (ID: 2987)
-        if (id === '2966' && !name.toLowerCase().includes('mini')) {
-          silver999Data = { id, name, bid, ask, high, low };
+        // Store all rates for reference
+        allRates[id] = { id, name, bid, ask, high, low, status };
+
+        // Extract Silver 999 (ID: 2966) - Primary rate
+        // Match by ID first (most reliable), then by name
+        if ((id === '2966' || (id && id.toString() === '2966')) && name && !name.toLowerCase().includes('mini')) {
+          silver999Data = { id, name, bid, ask, high, low, status };
           
           // ALWAYS use Ask price (selling price, most consistent)
-          // Only fallback to High if Ask is completely unavailable
           // Format: Ask price is per kg, convert to per gram
           if (ask && ask !== '-' && ask !== '' && ask !== '0' && !isNaN(parseFloat(ask))) {
             const parsedAsk = parseFloat(ask);
             if (parsedAsk > 0) {
               ratePerKg = parsedAsk;
               ratePerGram = ratePerKg / 1000;
-              console.log(`📊 Using ASK price: ₹${ratePerKg}/kg = ₹${ratePerGram.toFixed(2)}/gram`);
-              break; // Found rate, exit loop
             }
           }
-          // Fallback to High ONLY if Ask is completely unavailable (not just different)
+          // Fallback to High if Ask unavailable
           if (!ratePerGram && high && high !== '-' && high !== '' && high !== '0' && !isNaN(parseFloat(high))) {
             const parsedHigh = parseFloat(high);
             if (parsedHigh > 0) {
               ratePerKg = parsedHigh;
               ratePerGram = ratePerKg / 1000;
-              console.log(`⚠️ ASK unavailable, using HIGH price: ₹${ratePerKg}/kg = ₹${ratePerGram.toFixed(2)}/gram`);
-              break;
             }
           }
           // Try Bid price as last resort
@@ -91,31 +103,42 @@ const fetchFromRBGoldspot = async () => {
             if (parsedBid > 0) {
               ratePerKg = parsedBid;
               ratePerGram = ratePerKg / 1000;
-              console.log(`⚠️ ASK/HIGH unavailable, using BID price: ₹${ratePerKg}/kg = ₹${ratePerGram.toFixed(2)}/gram`);
-              break;
             }
+          }
+        }
+
+        // Extract USD-INR rate (ID: 3103)
+        if ((id === '3103' || (id && id.toString() === '3103')) || (name && (name.toLowerCase().includes('usd-inr') || name.toLowerCase().includes('usdinr')))) {
+          if (ask && ask !== '-' && ask !== '' && ask !== '0' && !isNaN(parseFloat(ask))) {
+            usdInrRate = parseFloat(ask);
+          } else if (high && high !== '-' && high !== '' && high !== '0' && !isNaN(parseFloat(high))) {
+            usdInrRate = parseFloat(high);
+          }
+        }
+
+        // Extract Gold 999 rate (ID: 945)
+        if ((id === '945' || (id && id.toString() === '945')) && name && name.toLowerCase().includes('gold 999')) {
+          if (ask && ask !== '-' && ask !== '' && ask !== '0' && !isNaN(parseFloat(ask))) {
+            gold999Rate = parseFloat(ask);
+          } else if (high && high !== '-' && high !== '' && high !== '0' && !isNaN(parseFloat(high))) {
+            gold999Rate = parseFloat(high);
+          }
+        }
+
+        // Extract Silver Mini 999 rate (ID: 2987)
+        if ((id === '2987' || (id && id.toString() === '2987')) && name && name.toLowerCase().includes('silver mini 999')) {
+          if (ask && ask !== '-' && ask !== '' && ask !== '0' && !isNaN(parseFloat(ask))) {
+            silverMini999Rate = parseFloat(ask);
+          } else if (high && high !== '-' && high !== '' && high !== '0' && !isNaN(parseFloat(high))) {
+            silverMini999Rate = parseFloat(high);
           }
         }
       }
     }
 
-    // Try to extract USD-INR rate from the same response
-    let usdInrRate = null;
-    for (const line of lines) {
-      const trimmedLine = line.trim();
-      if (!trimmedLine) continue;
-      const parts = trimmedLine.split(/\s{2,}|\t/).filter(p => p.trim());
-      if (parts.length >= 6) {
-        const name = parts[1].trim().toLowerCase();
-        if (name.includes('usd-inr') || name.includes('usdinr')) {
-          const ask = parts[3].trim();
-          if (ask && ask !== '-') {
-            usdInrRate = parseFloat(ask);
-            break;
-          }
-        }
-      }
-    }
+    // Log all extracted rates
+    console.log(`📊 Extracted rates: Silver 999=${ratePerKg || 'N/A'}, USD-INR=${usdInrRate || 'N/A'}, Gold 999=${gold999Rate || 'N/A'}, Silver Mini 999=${silverMini999Rate || 'N/A'}`);
+    console.log(`📊 Total rates found: ${Object.keys(allRates).length}`);
 
     if (ratePerGram && ratePerGram > 0 && !isNaN(ratePerGram)) {
       // Round consistently: 2 decimal places for gram, whole number for kg
@@ -128,7 +151,10 @@ const fetchFromRBGoldspot = async () => {
         source: 'bcast.rbgoldspot.com',
         timestamp: new Date(),
         rawData: silver999Data,
-        usdInrRate: usdInrRate || 89.25 // Default if not found
+        usdInrRate: usdInrRate || 89.25,
+        gold999Rate: gold999Rate || null,
+        silverMini999Rate: silverMini999Rate || null,
+        allRates: allRates // Include all rates for reference
       };
       console.log(`✅ Successfully extracted rate from RB Goldspot: ₹${result.ratePerGram.toFixed(2)}/gram (₹${result.ratePerKg}/kg) [Ask: ${silver999Data?.ask || 'N/A'}, High: ${silver999Data?.high || 'N/A'}]`);
       return result;
@@ -139,6 +165,7 @@ const fetchFromRBGoldspot = async () => {
     console.warn('  Silver 999 data:', silver999Data);
     console.warn('  ratePerGram:', ratePerGram);
     console.warn('  ratePerKg:', ratePerKg);
+    console.warn('  All rates:', Object.keys(allRates));
     return null;
   } catch (error) {
     console.error('❌ Error fetching from RB Goldspot:', error.message);
@@ -236,95 +263,115 @@ const fetchFromVercel = async () => {
 
     let ratePerKg = null;
     let ratePerGram = null;
+    let usdInrRate = null;
+    let gold999Rate = null;
+    let silverMini999Rate = null;
+    const allRates = {};
 
     // Handle different response formats
     if (rateData.prices && Array.isArray(rateData.prices)) {
       // Format: { prices: [...] }
       console.log('📋 Found prices array with', rateData.prices.length, 'items');
       
-      // Log all price items for debugging
+      // Extract ALL rates from prices array
       rateData.prices.forEach((item, index) => {
-        if (item.name && item.name.toLowerCase().includes('silver')) {
-          console.log(`  [${index}] ${item.name}: ask=${item.ask}, bid=${item.bid}, price=${item.price}`);
+        const itemId = item.id || item._id || index.toString();
+        const itemName = (item.name || '').toLowerCase();
+        
+        // Store all rates
+        allRates[itemId] = {
+          id: itemId,
+          name: item.name || '',
+          ask: item.ask || null,
+          bid: item.bid || null,
+          high: item.high || null,
+          low: item.low || null,
+          price: item.price || null
+        };
+
+        // Extract Silver 999 (Primary rate)
+        if (itemId === '2966' || (itemName === 'silver 999' && !itemName.includes('mini'))) {
+          if (item.ask && item.ask !== '-' && item.ask !== '' && !isNaN(parseFloat(item.ask))) {
+            const parsedAsk = parseFloat(item.ask);
+            if (parsedAsk > 0) {
+              ratePerKg = parsedAsk;
+              ratePerGram = ratePerKg / 1000;
+            }
+          } else if (item.high && item.high !== '-' && item.high !== '' && !isNaN(parseFloat(item.high))) {
+            const parsedHigh = parseFloat(item.high);
+            if (parsedHigh > 0) {
+              ratePerKg = parsedHigh;
+              ratePerGram = ratePerKg / 1000;
+            }
+          } else if (item.bid && item.bid !== '-' && item.bid !== '' && !isNaN(parseFloat(item.bid))) {
+            const parsedBid = parseFloat(item.bid);
+            if (parsedBid > 0) {
+              ratePerKg = parsedBid;
+              ratePerGram = ratePerKg / 1000;
+            }
+          } else if (item.price && !isNaN(parseFloat(item.price))) {
+            const price = parseFloat(item.price);
+            if (price > 0) {
+              ratePerKg = price > 1000 ? price : price * 1000;
+              ratePerGram = price > 1000 ? price / 1000 : price;
+            }
+          } else if (item.ratePerGram && !isNaN(parseFloat(item.ratePerGram))) {
+            ratePerGram = parseFloat(item.ratePerGram);
+            ratePerKg = ratePerGram * 1000;
+          }
+        }
+
+        // Extract USD-INR rate
+        if (itemId === '3103' || itemName.includes('usd-inr') || itemName.includes('usdinr')) {
+          if (item.ask && item.ask !== '-' && item.ask !== '' && !isNaN(parseFloat(item.ask))) {
+            usdInrRate = parseFloat(item.ask);
+          } else if (item.high && item.high !== '-' && item.high !== '' && !isNaN(parseFloat(item.high))) {
+            usdInrRate = parseFloat(item.high);
+          }
+        }
+
+        // Extract Gold 999 rate
+        if (itemId === '945' || itemName.includes('gold 999')) {
+          if (item.ask && item.ask !== '-' && item.ask !== '' && !isNaN(parseFloat(item.ask))) {
+            gold999Rate = parseFloat(item.ask);
+          } else if (item.high && item.high !== '-' && item.high !== '' && !isNaN(parseFloat(item.high))) {
+            gold999Rate = parseFloat(item.high);
+          }
+        }
+
+        // Extract Silver Mini 999 rate
+        if (itemId === '2987' || itemName.includes('silver mini 999')) {
+          if (item.ask && item.ask !== '-' && item.ask !== '' && !isNaN(parseFloat(item.ask))) {
+            silverMini999Rate = parseFloat(item.ask);
+          } else if (item.high && item.high !== '-' && item.high !== '' && !isNaN(parseFloat(item.high))) {
+            silverMini999Rate = parseFloat(item.high);
+          }
         }
       });
+
+      // Log all extracted rates
+      console.log(`📊 Extracted rates: Silver 999=${ratePerKg || 'N/A'}, USD-INR=${usdInrRate || 'N/A'}, Gold 999=${gold999Rate || 'N/A'}, Silver Mini 999=${silverMini999Rate || 'N/A'}`);
+      console.log(`📊 Total rates found: ${Object.keys(allRates).length}`);
       
-      let silver999 = rateData.prices.find(
-        item => item.name && item.name.toLowerCase() === 'silver 999'
-      );
-      
-      if (!silver999) {
-        silver999 = rateData.prices.find(
-          item => item.name && item.name.toLowerCase().includes('silver 999')
-        );
-      }
-      
-      if (!silver999) {
-        // Try to find any silver item
-        silver999 = rateData.prices.find(
-          item => item.name && item.name.toLowerCase().includes('silver')
-        );
-      }
-      
-      if (silver999) {
-        console.log('✅ Found silver item:', silver999.name);
-        if (silver999.ask && silver999.ask !== '-' && silver999.ask !== '') {
-          ratePerKg = parseFloat(silver999.ask);
-          if (!isNaN(ratePerKg) && ratePerKg > 0) {
-            ratePerGram = ratePerKg / 1000;
-            console.log(`✅ Using ask price: ₹${ratePerKg}/kg = ₹${ratePerGram}/gram`);
-          }
-        }
-        if (!ratePerGram && silver999.bid && silver999.bid !== '-' && silver999.bid !== '') {
-          ratePerKg = parseFloat(silver999.bid);
-          if (!isNaN(ratePerKg) && ratePerKg > 0) {
-            ratePerGram = ratePerKg / 1000;
-            console.log(`✅ Using bid price: ₹${ratePerKg}/kg = ₹${ratePerGram}/gram`);
-          }
-        }
-        // Try price field
-        if (!ratePerGram && silver999.price) {
-          const price = parseFloat(silver999.price);
-          if (!isNaN(price) && price > 0) {
-            ratePerKg = price > 1000 ? price : price * 1000;
-            ratePerGram = price > 1000 ? price / 1000 : price;
-            console.log(`✅ Using price field: ₹${ratePerKg}/kg = ₹${ratePerGram}/gram`);
-          }
-        }
-        // Try ratePerGram field directly
-        if (!ratePerGram && silver999.ratePerGram) {
-          ratePerGram = parseFloat(silver999.ratePerGram);
-          ratePerKg = ratePerGram * 1000;
-          console.log(`✅ Using ratePerGram field: ₹${ratePerGram}/gram`);
-        }
-      } else {
-        console.warn('⚠️ No silver item found in prices array');
-      }
     } else if (rateData.ratePerGram) {
       // Direct format: { ratePerGram: 168.39, ... }
       console.log('✅ Found ratePerGram directly:', rateData.ratePerGram);
       ratePerGram = parseFloat(rateData.ratePerGram);
       ratePerKg = ratePerGram * 1000;
+      usdInrRate = rateData.usdInrRate || rateData.usdRate || null;
     } else if (rateData.rate) {
       // Format: { rate: 168390, ... }
       console.log('✅ Found rate field:', rateData.rate);
       const rate = parseFloat(rateData.rate);
       ratePerGram = rate > 1000 ? rate / 1000 : rate;
       ratePerKg = rate > 1000 ? rate : rate * 1000;
+      usdInrRate = rateData.usdInrRate || rateData.usdRate || null;
     } else {
       console.warn('⚠️ Unknown rate data format:', Object.keys(rateData));
     }
 
-    // Try to extract USD-INR rate from Vercel response
-    let usdInrRate = null;
-    if (rateData.prices && Array.isArray(rateData.prices)) {
-      const usdInr = rateData.prices.find(
-        item => item.name && (item.name.toLowerCase().includes('usd-inr') || item.name.toLowerCase().includes('usdinr'))
-      );
-      if (usdInr && usdInr.ask && usdInr.ask !== '-') {
-        usdInrRate = parseFloat(usdInr.ask);
-      }
-    } else if (rateData.usdInrRate || rateData.usdRate) {
+    // Fallback: Try to extract USD-INR from top-level fields
+    if (!usdInrRate && (rateData.usdInrRate || rateData.usdRate)) {
       usdInrRate = parseFloat(rateData.usdInrRate || rateData.usdRate);
     }
 
@@ -335,14 +382,18 @@ const fetchFromVercel = async () => {
         source: 'jainsilverpp1.vercel.app',
         timestamp: new Date(),
         rawData: rateData,
-        usdInrRate: usdInrRate || 89.25 // Default if not found
+        usdInrRate: usdInrRate || 89.25,
+        gold999Rate: gold999Rate || null,
+        silverMini999Rate: silverMini999Rate || null,
+        allRates: allRates // Include all rates for reference
       };
-      console.log(`✅ Successfully extracted rate: ₹${result.ratePerGram}/gram (₹${result.ratePerKg}/kg)`);
+      console.log(`✅ Successfully extracted rate: ₹${result.ratePerGram.toFixed(2)}/gram (₹${result.ratePerKg}/kg)`);
       return result;
     }
     
     console.warn('⚠️ Could not extract valid rate from Vercel response');
     console.warn('  ratePerGram:', ratePerGram, 'ratePerKg:', ratePerKg);
+    console.warn('  All rates found:', Object.keys(allRates).length);
     console.warn('  Full rateData:', JSON.stringify(rateData, null, 2).substring(0, 1000));
     return null;
   } catch (error) {
