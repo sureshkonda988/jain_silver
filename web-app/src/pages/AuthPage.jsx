@@ -63,7 +63,19 @@ function AuthPage() {
         err.response?.data?.errors?.[0]?.msg ||
         err.message ||
         'Sign in failed. Please check your connection and try again.';
-      setError(errorMessage);
+      
+      // Show status information if available
+      const userStatus = err.response?.data?.userStatus || err.response?.data?.status;
+      if (userStatus) {
+        const statusMessages = {
+          'pending': 'Your account status: PENDING - Waiting for admin approval',
+          'rejected': 'Your account status: REJECTED - Please contact admin',
+          'approved': 'Your account is approved'
+        };
+        setError(`${errorMessage}\n\n${statusMessages[userStatus] || `Status: ${userStatus.toUpperCase()}`}`);
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }
