@@ -110,7 +110,7 @@ function AuthPage() {
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 4 }}>
             <Box
               component="img"
-              src="/jain_logo.png"
+              src="/Gemini_Generated_Image_8ia19c8ia19c8ia1.png"
               alt="Jain Silver Plaza"
               sx={{
                 width: { xs: 200, sm: 250 },

@@ -41,7 +41,7 @@ function Layout() {
       >
         <Toolbar>
           <Avatar
-            src="/jain_logo.png"
+            src="/Gemini_Generated_Image_8ia19c8ia19c8ia1.png"
             alt="Jain Silver Plaza"
             sx={{ width: 48, height: 48, mr: 2 }}
           />
